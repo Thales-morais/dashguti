@@ -46,9 +46,9 @@ def load_all_leads() -> pd.DataFrame:
         df["DATA"] = df["DATA"].dt.tz_localize(None)
 
     if "TELEFONE" in df.columns:
-        tel = df["TELEFONE"].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+        tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
         df["DDD"] = tel.apply(
-            lambda t: t[2:4] if t.startswith("55") and len(t) >= 4 else None
+            lambda t: t[2:4] if isinstance(t, str) and t.startswith("55") and len(t) >= 4 else None
         )
 
     return df

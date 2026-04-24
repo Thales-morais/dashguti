@@ -3,9 +3,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from ddd_coords import DDD_INFO
+
+BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 load_dotenv()
 
@@ -189,15 +192,14 @@ def section(label):
 
 
 # ── dados ─────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_leads():
     df = pd.read_csv(SHEETS_CSV_URL)
     df.columns = [c.strip().upper() for c in df.columns]
     if "DATA" in df.columns:
         s = df["DATA"].astype(str).str.extract(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})")[0]
-        df["DATA"] = pd.to_datetime(s, errors="coerce")
-        if getattr(df["DATA"].dtype, "tz", None):
-            df["DATA"] = df["DATA"].dt.tz_localize(None)
+        # interpreta como UTC (padrão do n8n) e converte para horário de Brasília
+        df["DATA"] = pd.to_datetime(s, errors="coerce", utc=True).dt.tz_convert(BRASILIA).dt.tz_localize(None)
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.strip()
         def _ddd(t):
@@ -323,7 +325,7 @@ with st.sidebar:
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 20px"></div>', unsafe_allow_html=True)
 
-    hoje    = date.today()
+    hoje    = datetime.now(tz=BRASILIA).date()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
 
     if periodo == "Hoje":      data_ini, data_fim = hoje, hoje

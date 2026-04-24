@@ -118,19 +118,6 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 .kpi-value {{ color:{TXT}; font-size:32px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-bottom:10px; font-variant-numeric:tabular-nums; flex:1; }}
 .kpi-badge {{ display:inline-flex; align-self:flex-start; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; width:fit-content; }}
 
-/* ── project breakdown bar ── */
-.proj-bar {{
-  display:flex; gap:12px; margin-bottom:28px;
-}}
-.proj-chip {{
-  flex:1; background:{SURF}; border:1px solid {BORDER}; border-radius:16px;
-  padding:14px 18px; display:flex; align-items:center; justify-content:space-between;
-  box-shadow:{SHADOW};
-}}
-.proj-chip-left {{ display:flex; flex-direction:column; gap:3px; }}
-.proj-chip-name {{ font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }}
-.proj-chip-pct  {{ font-size:11px; color:{MUTED}; font-weight:500; }}
-.proj-chip-val  {{ font-size:26px; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }}
 
 /* ── content cards (chart/table containers) ── */
 [data-testid="stVerticalBlockBorderWrapper"] {{
@@ -427,10 +414,10 @@ tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_geral:
 
-    # KPIs
+    # KPIs — linha 1
     k1,k2,k3,k4 = st.columns(4, gap="medium")
     k1.markdown(kpi_card(PURPLE,"Total de Leads",fmt_num(total),
-                         badge=f"Período: {periodo}",badge_color=f"rgba(139,92,246,.12)",badge_txt=PURPLE),
+                         badge=f"Período: {periodo}",badge_color="rgba(139,92,246,.12)",badge_txt=PURPLE),
                 unsafe_allow_html=True)
     k2.markdown(kpi_card(GREEN,"Valor Gasto",
                          fmt_brl(gasto) if gasto else "—",
@@ -440,33 +427,28 @@ with tab_geral:
     k3.markdown(kpi_card(AMBER,"Custo por Lead",
                          fmt_brl(cpl) if cpl else "—"),
                 unsafe_allow_html=True)
-    k4.markdown(kpi_card(ORANGE,"Leads em SP",
-                         fmt_num(leads_sp),
-                         badge=pct_sp,
-                         badge_color="rgba(249,115,22,.12)",badge_txt=ORANGE),
+    k4.markdown(kpi_card(ORANGE,"Leads em SP",fmt_num(leads_sp),
+                         badge=pct_sp,badge_color="rgba(249,115,22,.12)",badge_txt=ORANGE),
                 unsafe_allow_html=True)
 
     if df.empty:
         st.info("Nenhum lead encontrado no período."); st.stop()
 
-    # Breakdown por projeto — barra compacta
+    # KPIs — linha 2: breakdown por projeto (mesmo estilo da linha 1)
     if projeto_sel == "Todos" and "PROJETO" in df.columns:
         proj_colors = {"Trampah": PURPLE, "Latidah": GREEN, "Vigilha": AMBER}
-        chips = ""
-        for nome in PROJETOS:
-            n   = int((df["PROJETO"] == nome).sum())
-            pct = f"{n/total*100:.0f}% do total" if total else "—"
-            c   = proj_colors.get(nome, ORANGE)
-            dot = f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{c};margin-right:6px"></span>'
-            chips += f"""
-            <div class="proj-chip">
-              <div class="proj-chip-left">
-                <div class="proj-chip-name" style="color:{c}">{dot}{nome}</div>
-                <div class="proj-chip-pct">{pct}</div>
-              </div>
-              <div class="proj-chip-val" style="color:{TXT}">{fmt_num(n)}</div>
-            </div>"""
-        st.markdown(f'<div class="proj-bar">{chips}</div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:16px"></div>', unsafe_allow_html=True)
+        p1, p2, p3, _ = st.columns(4, gap="medium")
+        for col, (nome, _tbl) in zip([p1, p2, p3], PROJETOS.items()):
+            n = int((df["PROJETO"] == nome).sum())
+            pct = f"{n/total*100:.0f}% do total" if total else ""
+            c = proj_colors.get(nome, ORANGE)
+            r, g, b = int(c[1:3],16), int(c[3:5],16), int(c[5:7],16)
+            col.markdown(kpi_card(c, nome, fmt_num(n),
+                                  badge=pct,
+                                  badge_color=f"rgba({r},{g},{b},.12)",
+                                  badge_txt=c),
+                         unsafe_allow_html=True)
 
     # Mapa
     section("Distribuição Geográfica")

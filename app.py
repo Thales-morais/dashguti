@@ -21,8 +21,13 @@ META_TOKEN    = os.getenv("META_ACCESS_TOKEN", "")
 META_ACCOUNT  = os.getenv("META_AD_ACCOUNT_ID", "")
 SUPABASE_URL  = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY  = os.getenv("SUPABASE_KEY", "")
-TABLE         = "lead_guti_trampah"
 SP_DDDS       = {"11","12","13","14","15","16","17","18","19"}
+
+PROJETOS = {
+    "Trampah": "lead_guti_trampah",
+    "Latidah":  "lead_guti_latidah",
+    "Vigilha":  "lead_guti_vigilha",
+}
 
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
@@ -215,8 +220,8 @@ def _process_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 @st.cache_data(ttl=20)
-def load_leads():
-    """Lê todos os leads do Supabase com paginação."""
+def _fetch_table(table: str) -> pd.DataFrame:
+    """Busca todos os registros de uma tabela Supabase com paginação."""
     hdrs = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -224,7 +229,7 @@ def load_leads():
     }
     rows, offset, page = [], 0, 1000
     while True:
-        url = (f"{SUPABASE_URL}/rest/v1/{TABLE}"
+        url = (f"{SUPABASE_URL}/rest/v1/{table}"
                f"?select=DATA,NOME,EMAIL,TELEFONE,FONTE"
                f"&order=DATA.desc&limit={page}&offset={offset}")
         r = requests.get(url, headers=hdrs, timeout=15)
@@ -234,7 +239,19 @@ def load_leads():
         if len(batch) < page:
             break
         offset += page
-    return _process_df(pd.DataFrame(rows))
+    return pd.DataFrame(rows)
+
+def load_leads(projetos: tuple) -> pd.DataFrame:
+    """Combina leads dos projetos selecionados, cada um cacheado individualmente."""
+    frames = []
+    for nome, table in PROJETOS.items():
+        if nome in projetos:
+            df = _fetch_table(table)
+            df["PROJETO"] = nome
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return _process_df(pd.concat(frames, ignore_index=True))
 
 @st.cache_data(ttl=300)
 def get_spend(since, until):
@@ -342,7 +359,7 @@ with st.sidebar:
     with c_title:
         st.markdown(f"""
         <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em;line-height:1.1">DashGuti</div>
-        <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Trampah · Analytics</div>
+        <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Multi-projeto · Analytics</div>
         """, unsafe_allow_html=True)
     if c_theme.button(BTN_ICON, use_container_width=True):
         st.session_state.dark = not D; st.rerun()
@@ -350,6 +367,11 @@ with st.sidebar:
         st.cache_data.clear(); st.rerun()
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 20px"></div>', unsafe_allow_html=True)
+
+    projeto_sel = st.selectbox("PROJETO", ["Todos"] + list(PROJETOS.keys()), index=0)
+    projetos_ativos = tuple(PROJETOS.keys()) if projeto_sel == "Todos" else (projeto_sel,)
+
+    st.markdown(f'<div style="height:1px;background:{BORDER};margin:16px 0 16px"></div>', unsafe_allow_html=True)
 
     hoje    = datetime.now(tz=BRASILIA).date()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
@@ -372,7 +394,7 @@ since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
 
 with st.spinner(""):
-    try:    df_all = load_leads(); erro = None
+    try:    df_all = load_leads(projetos_ativos); erro = None
     except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:
@@ -418,6 +440,19 @@ with tab_geral:
 
     if df.empty:
         st.info("Nenhum lead encontrado no período."); st.stop()
+
+    # Breakdown por projeto (só quando "Todos" estiver selecionado)
+    if projeto_sel == "Todos" and "PROJETO" in df.columns:
+        proj_colors = {"Trampah": PURPLE, "Latidah": GREEN, "Vigilha": AMBER}
+        cols_p = st.columns(len(PROJETOS), gap="medium")
+        for col, (nome, _) in zip(cols_p, PROJETOS.items()):
+            n = int((df["PROJETO"] == nome).sum())
+            pct = f"{n/total*100:.0f}% do total" if total else ""
+            c = proj_colors.get(nome, ORANGE)
+            col.markdown(kpi_card(c, nome, fmt_num(n), badge=pct,
+                                  badge_color=f"rgba({int(c[1:3],16)},{int(c[3:5],16)},{int(c[5:7],16)},.12)",
+                                  badge_txt=c),
+                         unsafe_allow_html=True)
 
     # Mapa
     section("Distribuição Geográfica")
@@ -489,5 +524,5 @@ with tab_leads:
                | df_show.get("EMAIL", pd.Series(dtype=str)).str.contains(search,case=False,na=False))
             df_show = df_show[m]
 
-        cols = [c for c in ["DATA","NOME","EMAIL","TELEFONE","DDD","FONTE"] if c in df_show.columns]
+        cols = [c for c in ["PROJETO","DATA","NOME","EMAIL","TELEFONE","DDD","FONTE"] if c in df_show.columns]
         st.dataframe(df_show[cols], use_container_width=True, hide_index=True, height=540)

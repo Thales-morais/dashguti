@@ -206,6 +206,11 @@ def _process_df(df: pd.DataFrame) -> pd.DataFrame:
             .dt.tz_convert(BRASILIA)
             .dt.tz_localize(None)
         )
+    if "FONTE" in df.columns:
+        df["FONTE"] = (df["FONTE"].astype(str)
+                       .str.replace(r"[_\-]?kilorias[_\-]?", "", regex=True, case=False)
+                       .str.strip("_- ").str.strip()
+                       .replace({"": None, "nan": None, "none": None}))
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.strip()
         def _ddd(t):

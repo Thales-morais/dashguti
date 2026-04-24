@@ -44,8 +44,14 @@ def load_all_leads() -> pd.DataFrame:
     df.columns = [c.strip().upper() for c in df.columns]
 
     if "DATA" in df.columns:
-        df["DATA"] = pd.to_datetime(df["DATA"], errors="coerce", utc=True)
-        df["DATA"] = df["DATA"].dt.tz_localize(None)
+        # extrai a parte ISO de strings mistas como "20/04/26 2026-04-20T03:10:05"
+        data_str = df["DATA"].astype(str).str.extract(
+            r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"
+        )[0]
+        df["DATA"] = pd.to_datetime(data_str, errors="coerce")
+        # remove timezone se houver
+        if hasattr(df["DATA"].dtype, "tz") and df["DATA"].dt.tz is not None:
+            df["DATA"] = df["DATA"].dt.tz_localize(None)
 
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True).str.strip()

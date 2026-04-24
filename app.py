@@ -1,4 +1,4 @@
-import os, json, requests
+import os, json, re, requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -172,10 +172,11 @@ def load_leads():
         if getattr(df["DATA"].dtype, "tz", None):
             df["DATA"] = df["DATA"].dt.tz_localize(None)
     if "TELEFONE" in df.columns:
-        tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$","",regex=True).str.strip()
+        tel = df["TELEFONE"].fillna("").astype(str).str.strip()
         def _ddd(t):
-            if not t: return None
-            candidate = t[2:4] if t.startswith("55") else t[:2]
+            digits = re.sub(r"\D", "", t)  # remove tudo que não é dígito: (, ), -, espaço, p:+, etc.
+            if len(digits) < 2: return None
+            candidate = digits[2:4] if digits.startswith("55") and len(digits) >= 12 else digits[:2]
             return candidate if candidate in DDD_INFO else None
         df["DDD"] = tel.apply(_ddd)
     return df

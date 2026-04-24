@@ -42,16 +42,20 @@ st.markdown("""
     background: linear-gradient(135deg, #161b22 0%, #1c2333 100%);
     border: 1px solid #30363d;
     border-radius: 14px;
-    padding: 22px 24px 18px 24px;
+    padding: 22px 24px;
     text-align: center;
     transition: border-color .2s;
+    height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   .kpi-card:hover { border-color: #f97316; }
-  .kpi-icon  { font-size: 22px; margin-bottom: 6px; }
-  .kpi-label { color: #8b949e; font-size: 12px; font-weight: 500;
+  .kpi-icon  { font-size: 20px; margin-bottom: 4px; }
+  .kpi-label { color: #8b949e; font-size: 11px; font-weight: 500;
                letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
-  .kpi-value { color: #f0f6fc; font-size: 34px; font-weight: 700; line-height: 1.1; }
-  .kpi-sub   { color: #f97316; font-size: 12px; margin-top: 4px; }
+  .kpi-value { color: #f0f6fc; font-size: 32px; font-weight: 700; line-height: 1.1; }
+  .kpi-sub   { color: #f97316; font-size: 11px; margin-top: 4px; }
 
   /* section title */
   .section-title {
@@ -215,7 +219,7 @@ def build_map_sp(df: pd.DataFrame) -> go.Figure:
 
     fig.update_layout(
         mapbox=dict(
-            style="carto-darkmatter",
+            style="carto-positron",
             center={"lat": -22.2, "lon": -48.8},
             zoom=5.8,
         ),

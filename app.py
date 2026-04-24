@@ -129,9 +129,19 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 div[data-testid="stSelectbox"] > label  {{ color:{MUTED} !important; font-size:11px !important; font-weight:600 !important; letter-spacing:.08em !important; text-transform:uppercase !important; }}
 div[data-testid="stSelectbox"] > div > div {{ background:{SURF} !important; border:1px solid {BORDER} !important; border-radius:12px !important; color:{TXT} !important; box-shadow:{SHADOW}; }}
 
-/* ── buttons ── */
-.stButton>button {{ background:{SURF}; color:{MUTED}; border:1px solid {BORDER}; border-radius:10px; width:100%; font-size:16px; font-weight:500; padding:6px 4px; transition:all .2s; line-height:1; }}
-.stButton>button:hover {{ border-color:{ORANGE}; color:{ORANGE}; }}
+/* ── sidebar icon buttons ── */
+section[data-testid="stSidebar"] .stButton>button {{
+  background:{SURF} !important; color:{MUTED} !important;
+  border:1px solid {BORDER} !important; border-radius:10px !important;
+  height:36px !important; min-height:unset !important;
+  font-size:17px !important; padding:0 !important;
+  display:flex !important; align-items:center !important; justify-content:center !important;
+  transition:border-color .2s,color .2s;
+}}
+section[data-testid="stSidebar"] .stButton>button:hover {{
+  border-color:{ORANGE} !important; color:{ORANGE} !important;
+}}
+section[data-testid="stSidebar"] .stButton {{ margin-top:0 !important; margin-bottom:0 !important; }}
 
 /* ── text input ── */
 .stTextInput>div>div {{ background:{SURF} !important; border:1px solid {BORDER} !important; border-radius:12px !important; box-shadow:{SHADOW}; }}
@@ -293,13 +303,13 @@ def bar_fonte(df):
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    # header: título + ícones de ação lado a lado
+    # header: título + ícones lado a lado
     c_title, c_theme, c_refresh = st.columns([5, 1, 1])
-    c_title.markdown(f"""
-    <div style="padding-top:2px">
-      <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em">DashGuti</div>
-      <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Trampah · Analytics</div>
-    </div>""", unsafe_allow_html=True)
+    with c_title:
+        st.markdown(f"""
+        <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em;line-height:1.1">DashGuti</div>
+        <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Trampah · Analytics</div>
+        """, unsafe_allow_html=True)
     if c_theme.button(BTN_ICON, use_container_width=True, help=BTN_LBL):
         st.session_state.dark = not D; st.rerun()
     if c_refresh.button("⟳", use_container_width=True, help="Atualizar dados"):

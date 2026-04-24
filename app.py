@@ -64,10 +64,21 @@ section[data-testid="stSidebar"]  {{ background:{BG} !important; border-right:1p
 section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 
 /* ── tabs ── */
+.stTabs                            {{ margin-top:28px !important; }}
 .stTabs [data-baseweb="tab-list"] {{ background:{SURF} !important; border-radius:14px; padding:5px; border:1px solid {BORDER}; gap:3px; }}
 .stTabs [data-baseweb="tab"]      {{ border-radius:10px !important; color:{MUTED} !important; font-size:13px !important; font-weight:500 !important; padding:8px 18px !important; transition:all .2s; }}
 .stTabs [aria-selected="true"]    {{ background:{BG} !important; color:{TXT} !important; box-shadow:{SHADOW}; }}
 .stTabs [data-baseweb="tab-panel"]{{ padding-top:28px !important; }}
+
+/* ── sidebar icon buttons ── */
+.icon-btn {{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; border-radius:8px;
+  border:1px solid {BORDER}; background:{SURF};
+  color:{MUTED}; font-size:15px; cursor:pointer;
+  transition:border-color .2s, color .2s; text-decoration:none;
+}}
+.icon-btn:hover {{ border-color:{ORANGE}; color:{ORANGE}; }}
 
 /* ── KPI cards ── */
 .kpi-wrap {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:32px; }}
@@ -119,7 +130,7 @@ div[data-testid="stSelectbox"] > label  {{ color:{MUTED} !important; font-size:1
 div[data-testid="stSelectbox"] > div > div {{ background:{SURF} !important; border:1px solid {BORDER} !important; border-radius:12px !important; color:{TXT} !important; box-shadow:{SHADOW}; }}
 
 /* ── buttons ── */
-.stButton>button {{ background:{SURF}; color:{MUTED}; border:1px solid {BORDER}; border-radius:12px; width:100%; font-size:13px; font-weight:500; padding:10px; transition:all .2s; }}
+.stButton>button {{ background:{SURF}; color:{MUTED}; border:1px solid {BORDER}; border-radius:10px; width:100%; font-size:16px; font-weight:500; padding:6px 4px; transition:all .2s; line-height:1; }}
 .stButton>button:hover {{ border-color:{ORANGE}; color:{ORANGE}; }}
 
 /* ── text input ── */
@@ -282,13 +293,19 @@ def bar_fonte(df):
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(f"""
-    <div style="margin-bottom:32px">
-      <div style="font-size:20px;font-weight:800;color:{TXT};letter-spacing:-.03em">DashGuti</div>
-      <div style="font-size:12px;color:{MUTED2};margin-top:4px;font-weight:500">Trampah · Analytics</div>
-    </div>
-    <div style="height:1px;background:{BORDER};margin-bottom:28px"></div>
-    """, unsafe_allow_html=True)
+    # header: título + ícones de ação lado a lado
+    c_title, c_theme, c_refresh = st.columns([5, 1, 1])
+    c_title.markdown(f"""
+    <div style="padding-top:2px">
+      <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em">DashGuti</div>
+      <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Trampah · Analytics</div>
+    </div>""", unsafe_allow_html=True)
+    if c_theme.button(BTN_ICON, use_container_width=True, help=BTN_LBL):
+        st.session_state.dark = not D; st.rerun()
+    if c_refresh.button("⟳", use_container_width=True, help="Atualizar dados"):
+        st.cache_data.clear(); st.rerun()
+
+    st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 20px"></div>', unsafe_allow_html=True)
 
     hoje    = date.today()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
@@ -302,14 +319,7 @@ with st.sidebar:
         data_ini = ca.date_input("De",  hoje-timedelta(30), label_visibility="collapsed")
         data_fim = cb.date_input("Até", hoje,               label_visibility="collapsed")
 
-    st.markdown(f'<div style="height:1px;background:{BORDER};margin:28px 0 20px"></div>', unsafe_allow_html=True)
-
-    if st.button(f"{BTN_ICON}  {BTN_LBL}"):
-        st.session_state.dark = not D; st.rerun()
-    st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-    if st.button("⟳  Atualizar dados"):
-        st.cache_data.clear(); st.rerun()
-    st.markdown(f'<p style="color:{MUTED2};font-size:11px;text-align:center;margin-top:16px">auto-refresh a cada 60s</p>',
+    st.markdown(f'<p style="color:{MUTED2};font-size:11px;text-align:center;margin-top:20px">auto-refresh a cada 60s</p>',
                 unsafe_allow_html=True)
 
 

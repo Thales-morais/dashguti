@@ -1,6 +1,4 @@
-import os
-import json
-import requests
+import os, json, requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -19,90 +17,99 @@ META_TOKEN   = os.getenv("META_ACCESS_TOKEN", "")
 META_ACCOUNT = os.getenv("META_AD_ACCOUNT_ID", "")
 SP_DDDS      = {"11","12","13","14","15","16","17","18","19"}
 
-# ─────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="DashGuti", page_icon="📊", layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(page_title="DashGuti", page_icon="📊",
+                   layout="wide", initial_sidebar_state="expanded")
 
-st.markdown("""
+# ── tema ──────────────────────────────────────────────────────────────────────
+if "dark" not in st.session_state:
+    st.session_state.dark = True
+
+dark = st.session_state.dark
+
+# paleta
+if dark:
+    BG       = "#09090b"
+    SURFACE  = "#111113"
+    BORDER   = "#1c1c1e"
+    BORDER2  = "#27272a"
+    TXT      = "#fafafa"
+    MUTED    = "#71717a"
+    MUTED2   = "#3f3f46"
+    CHART_BG = "#0d0d0f"
+    GRID     = "#1c1c1e"
+    MAP_STYLE= "carto-darkmatter"
+    BTN_ICON = "☀️"
+    BTN_TXT  = "Modo claro"
+else:
+    BG       = "#f4f4f5"
+    SURFACE  = "#ffffff"
+    BORDER   = "#e4e4e7"
+    BORDER2  = "#d4d4d8"
+    TXT      = "#09090b"
+    MUTED    = "#71717a"
+    MUTED2   = "#a1a1aa"
+    CHART_BG = "#ffffff"
+    GRID     = "#f4f4f5"
+    MAP_STYLE= "carto-positron"
+    BTN_ICON = "🌙"
+    BTN_TXT  = "Modo escuro"
+
+st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html,body,[class*="css"]{{font-family:'Inter',sans-serif;}}
 
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+.stApp                           {{background:{BG};}}
+.block-container                 {{padding:2rem 2rem 2rem 2rem;max-width:100%;}}
+section[data-testid="stSidebar"] {{background:{BG};border-right:1px solid {BORDER};}}
 
-/* ── layout ── */
-.stApp                          { background: #09090b; }
-.block-container                { padding: 1.5rem 2rem 2rem 2rem; max-width: 100%; }
-section[data-testid="stSidebar"]{ background: #09090b; border-right: 1px solid #1c1c1e; }
+/* KPI */
+.kpi{{background:{SURFACE};border:1px solid {BORDER};border-radius:16px;
+      padding:24px 20px;height:130px;display:flex;flex-direction:column;
+      justify-content:space-between;transition:border-color .2s,box-shadow .2s;}}
+.kpi:hover{{border-color:#f97316;box-shadow:0 0 0 1px #f9731618;}}
+.kpi-top{{display:flex;align-items:center;gap:8px;}}
+.kpi-dot{{width:8px;height:8px;border-radius:50%;flex-shrink:0;}}
+.kpi-label{{color:{MUTED};font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}}
+.kpi-value{{color:{TXT};font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;}}
+.kpi-sub{{color:#f97316;font-size:11px;font-weight:500;}}
+.kpi-sub-gray{{color:{MUTED2};font-size:11px;}}
 
-/* ── KPI card ── */
-.kpi {
-  background: #111113;
-  border: 1px solid #1c1c1e;
-  border-radius: 16px;
-  padding: 24px 20px;
-  height: 130px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: border-color .25s, box-shadow .25s;
-}
-.kpi:hover { border-color: #f97316; box-shadow: 0 0 0 1px #f9731622; }
-.kpi-top   { display: flex; align-items: center; gap: 8px; }
-.kpi-dot   { width: 8px; height: 8px; border-radius: 50%; background: #f97316; flex-shrink: 0; }
-.kpi-label { color: #71717a; font-size: 11px; font-weight: 500;
-             letter-spacing: .08em; text-transform: uppercase; }
-.kpi-value { color: #fafafa; font-size: 30px; font-weight: 700;
-             font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
-.kpi-sub   { color: #f97316; font-size: 11px; font-weight: 500; }
-.kpi-sub-gray { color: #52525b; font-size: 11px; }
+/* section */
+.sec{{display:flex;align-items:center;gap:10px;margin:32px 0 14px 0;}}
+.sec-line{{width:3px;height:16px;background:#f97316;border-radius:2px;flex-shrink:0;}}
+.sec-text{{color:{MUTED};font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}}
 
-/* ── section header ── */
-.sec {
-  display: flex; align-items: center; gap: 10px;
-  margin: 28px 0 14px 0;
-}
-.sec-line { width: 3px; height: 16px; background: #f97316; border-radius: 2px; flex-shrink:0; }
-.sec-text { color: #a1a1aa; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+/* subtitle */
+.chart-sub{{color:{MUTED};font-size:12px;margin:0 0 8px 2px;}}
 
-/* ── chart wrap ── */
-[data-testid="stPlotlyChart"] {
-  border-radius: 14px !important;
-  overflow: hidden;
-}
+/* tabs */
+.stTabs [data-baseweb="tab-list"]{{background:{SURFACE};border-radius:12px;padding:4px;gap:2px;border:1px solid {BORDER};}}
+.stTabs [data-baseweb="tab"]{{border-radius:8px;color:{MUTED} !important;font-size:13px;font-weight:500;}}
+.stTabs [aria-selected="true"]{{background:{BORDER2} !important;color:{TXT} !important;}}
+.stTabs [data-baseweb="tab-panel"]{{padding-top:20px !important;}}
 
-/* ── dataframe ── */
-[data-testid="stDataFrame"] > div { border-radius: 12px !important; overflow: hidden; }
-[data-testid="stDataFrame"] thead th { background: #111113 !important; color: #71717a !important;
-  font-size: 11px !important; letter-spacing: .06em !important; text-transform: uppercase !important; }
-[data-testid="stDataFrame"] tbody tr:hover td { background: #1c1c1e !important; }
+/* sidebar */
+div[data-testid="stSelectbox"] label{{color:{MUTED};font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}}
+div[data-testid="stSelectbox"] > div > div{{background:{SURFACE} !important;border-color:{BORDER2} !important;border-radius:10px !important;color:{TXT} !important;}}
 
-/* ── tabs ── */
-.stTabs [data-baseweb="tab-list"]  { background: #111113; border-radius: 12px; padding: 4px; gap: 2px; }
-.stTabs [data-baseweb="tab"]       { border-radius: 8px; color: #71717a !important; font-size: 13px; font-weight: 500; }
-.stTabs [aria-selected="true"]     { background: #1c1c1e !important; color: #fafafa !important; }
-.stTabs [data-baseweb="tab-panel"] { padding-top: 0 !important; }
+/* button */
+.stButton>button{{background:{SURFACE};color:{MUTED};border:1px solid {BORDER2};
+  border-radius:10px;width:100%;font-size:13px;padding:9px 0;transition:all .2s;}}
+.stButton>button:hover{{border-color:#f97316;color:#f97316;}}
 
-/* ── sidebar ── */
-.stRadio [data-testid="stMarkdownContainer"] p { color: #a1a1aa; font-size: 13px; }
-div[data-testid="stRadio"] label { font-size: 13px !important; color: #d4d4d8 !important; }
-div[data-testid="stRadio"] label:hover { color: #fafafa !important; }
+/* text input */
+.stTextInput>div>div{{background:{SURFACE} !important;border-color:{BORDER2} !important;border-radius:10px !important;}}
+.stTextInput input{{color:{TXT} !important;font-size:13px !important;}}
 
-/* ── button ── */
-.stButton > button {
-  background: #111113; color: #d4d4d8; border: 1px solid #27272a;
-  border-radius: 10px; width: 100%; font-size: 13px; padding: 8px 0;
-  transition: all .2s;
-}
-.stButton > button:hover { border-color: #f97316; color: #f97316; background: #18100a; }
+/* dataframe */
+[data-testid="stDataFrame"] thead th{{background:{SURFACE} !important;color:{MUTED} !important;
+  font-size:11px !important;letter-spacing:.06em !important;text-transform:uppercase !important;}}
 
-/* ── text input ── */
-.stTextInput > div > div { background: #111113 !important; border-color: #27272a !important; border-radius: 10px !important; }
-.stTextInput input { color: #fafafa !important; font-size: 13px !important; }
-
-/* ── scrollbar ── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #09090b; }
-::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+/* scrollbar */
+::-webkit-scrollbar{{width:5px;height:5px;}}
+::-webkit-scrollbar-track{{background:{BG};}}
+::-webkit-scrollbar-thumb{{background:{BORDER2};border-radius:4px;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -111,20 +118,20 @@ div[data-testid="stRadio"] label:hover { color: #fafafa !important; }
 def fmt_brl(v): return f"R$ {v:,.2f}".replace(",","X").replace(".",",").replace("X",".")
 def fmt_num(v): return f"{v:,}".replace(",",".")
 
-def kpi(dot_color, label, value, sub="", sub_gray=False):
+def kpi_html(dot_color, label, value, sub="", sub_gray=False):
     sub_cls  = "kpi-sub-gray" if sub_gray else "kpi-sub"
     sub_html = f'<div class="{sub_cls}">{sub}</div>' if sub else '<div style="height:14px"></div>'
-    dot_style = f'background:{dot_color}' if dot_color != "#f97316" else ""
-    dot_html  = f'<div class="kpi-dot" style="{dot_style}"></div>' if dot_style else '<div class="kpi-dot"></div>'
-    return f"""<div class="kpi">
-      <div class="kpi-top">{dot_html}<span class="kpi-label">{label}</span></div>
-      <div class="kpi-value">{value}</div>
-      {sub_html}
-    </div>"""
+    return (f'<div class="kpi"><div class="kpi-top">'
+            f'<div class="kpi-dot" style="background:{dot_color}"></div>'
+            f'<span class="kpi-label">{label}</span></div>'
+            f'<div class="kpi-value">{value}</div>{sub_html}</div>')
 
 def sec(title):
     st.markdown(f'<div class="sec"><div class="sec-line"></div>'
                 f'<span class="sec-text">{title}</span></div>', unsafe_allow_html=True)
+
+def chart_sub(txt):
+    st.markdown(f'<p class="chart-sub">{txt}</p>', unsafe_allow_html=True)
 
 
 # ── dados ─────────────────────────────────────────────────────────────────────
@@ -157,10 +164,6 @@ def get_meta_spend(since, until):
 
 
 # ── charts ────────────────────────────────────────────────────────────────────
-CHART_BG    = "#0d0d0f"
-GRID_COLOR  = "#1c1c1e"
-FONT_COLOR  = "#a1a1aa"
-
 def build_map(df):
     if "DDD" not in df.columns or df.empty: return go.Figure()
     df_sp = df[df["DDD"].isin(SP_DDDS)]
@@ -174,48 +177,45 @@ def build_map(df):
             rows.append({"DDD":r["DDD"],"leads":int(r["leads"]),
                          "lat":info["lat"],"lon":info["lon"],"cidade":info["cidade"]})
     if not rows: return go.Figure()
-    mdf = pd.DataFrame(rows)
-    mx  = mdf["leads"].max()
-
+    mdf = pd.DataFrame(rows); mx = mdf["leads"].max()
     fig = go.Figure()
     fig.add_trace(go.Scattermapbox(
         lat=mdf["lat"], lon=mdf["lon"], mode="markers",
-        marker=dict(size=mdf["leads"]/mx*60+16, color=mdf["leads"],
+        marker=dict(size=mdf["leads"]/mx*65+14,color=mdf["leads"],
                     colorscale=[[0,"#6366f1"],[.5,"#f97316"],[1,"#ef4444"]],
-                    opacity=.82, showscale=False),
+                    opacity=.85,showscale=False),
         text=mdf.apply(lambda r: f"<b>DDD {r['DDD']} — {r['cidade']}</b><br>{r['leads']:,} leads",axis=1),
-        hoverinfo="text", name="",
+        hoverinfo="text",name="",
     ))
     fig.add_trace(go.Scattermapbox(
-        lat=mdf["lat"], lon=mdf["lon"], mode="text",
-        text=mdf["DDD"], textfont=dict(size=10,color="#ffffff",family="Inter"),
-        hoverinfo="skip", name="",
+        lat=mdf["lat"],lon=mdf["lon"],mode="text",
+        text=mdf["DDD"],textfont=dict(size=11,color="#fff",family="Inter"),
+        hoverinfo="skip",name="",
     ))
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center={"lat":-22.2,"lon":-48.8}, zoom=5.8),
-        margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor=CHART_BG,
-        showlegend=False, height=400,
+        mapbox=dict(style=MAP_STYLE,center={"lat":-22.2,"lon":-48.8},zoom=5.8),
+        margin=dict(r=0,t=0,l=0,b=0),paper_bgcolor=CHART_BG,
+        showlegend=False,height=460,
     )
     return fig
 
 
-def build_bar(df, top_n=15):
-    if "DDD" not in df.columns or df.empty: return go.Figure()
-    counts = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().head(top_n).reset_index()
-    counts.columns = ["DDD","leads"]
-    counts["label"] = counts["DDD"].map(lambda d: f"DDD {d} · {DDD_INFO[d]['cidade']}" if d in DDD_INFO else f"DDD {d}")
-    counts = counts.sort_values("leads")
+def build_bar_fonte(df, total):
+    if "FONTE" not in df.columns or df.empty: return go.Figure()
+    rf = df["FONTE"].fillna("Não informado").value_counts().reset_index()
+    rf.columns = ["Fonte","Leads"]
+    rf = rf.sort_values("Leads")
     fig = go.Figure(go.Bar(
-        x=counts["leads"], y=counts["label"], orientation="h",
-        marker=dict(color=counts["leads"], colorscale=[[0,"#6366f1"],[1,"#f97316"]], showscale=False,
-                    line=dict(width=0)),
-        text=counts["leads"].apply(lambda v: fmt_num(int(v))),
-        textposition="outside", textfont=dict(color="#52525b",size=10),
+        x=rf["Leads"], y=rf["Fonte"], orientation="h",
+        marker=dict(color=rf["Leads"],colorscale=[[0,"#6366f1"],[1,"#f97316"]],
+                    showscale=False,line=dict(width=0)),
+        text=rf["Leads"].apply(lambda v: fmt_num(int(v))),
+        textposition="outside",textfont=dict(color=MUTED2,size=10),
     ))
     fig.update_layout(
-        margin=dict(r=50,t=0,l=0,b=0), paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
-        font_color=FONT_COLOR, font_size=11, height=400,
-        xaxis=dict(gridcolor=GRID_COLOR,zeroline=False,showline=False,tickfont_size=10),
+        margin=dict(r=60,t=0,l=0,b=0),paper_bgcolor=CHART_BG,plot_bgcolor=CHART_BG,
+        font_color=MUTED,font_size=12,height=200,
+        xaxis=dict(gridcolor=GRID,zeroline=False,showline=False,tickfont_size=10),
         yaxis=dict(gridcolor="rgba(0,0,0,0)",showline=False,tickfont_size=11),
     )
     return fig
@@ -228,48 +228,52 @@ def build_area(df):
     daily = daily.groupby("dia").size().reset_index(name="leads")
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=daily["dia"], y=daily["leads"], mode="lines", fill="tozeroy",
-        line=dict(color="#f97316",width=2.5),
-        fillcolor="rgba(249,115,22,0.08)",
+        x=daily["dia"],y=daily["leads"],mode="lines",fill="tozeroy",
+        line=dict(color="#f97316",width=2.5),fillcolor="rgba(249,115,22,0.10)",
         hovertemplate="<b>%{y} leads</b><br>%{x}<extra></extra>",
     ))
     fig.update_layout(
-        margin=dict(r=10,t=10,l=0,b=0), paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
-        font_color=FONT_COLOR, height=200, hovermode="x unified",
-        xaxis=dict(gridcolor=GRID_COLOR,showline=False,tickformat="%d/%m",tickfont_size=11),
-        yaxis=dict(gridcolor=GRID_COLOR,showline=False,tickfont_size=11),
+        margin=dict(r=10,t=10,l=0,b=0),paper_bgcolor=CHART_BG,plot_bgcolor=CHART_BG,
+        font_color=MUTED,height=200,hovermode="x unified",
+        xaxis=dict(gridcolor=GRID,showline=False,tickformat="%d/%m",tickfont_size=11),
+        yaxis=dict(gridcolor=GRID,showline=False,tickfont_size=11),
     )
     return fig
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
-    <div style="padding:8px 0 20px 0">
-      <div style="font-size:18px;font-weight:700;color:#fafafa;letter-spacing:-.02em">DashGuti</div>
-      <div style="font-size:12px;color:#52525b;margin-top:2px">Trampah · Analytics</div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="padding:10px 0 24px 0">
+      <div style="font-size:18px;font-weight:700;color:{TXT};letter-spacing:-.02em">DashGuti</div>
+      <div style="font-size:12px;color:{MUTED2};margin-top:3px">Trampah · Analytics</div>
+    </div>
+    <div style="height:1px;background:{BORDER};margin-bottom:24px"></div>
+    """, unsafe_allow_html=True)
 
-    st.markdown('<div style="height:1px;background:#1c1c1e;margin-bottom:20px"></div>', unsafe_allow_html=True)
-    st.markdown('<div style="color:#71717a;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Período</div>', unsafe_allow_html=True)
+    hoje    = date.today()
+    periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
 
-    hoje   = date.today()
-    periodo = st.radio("", ["Hoje","7 dias","30 dias","Total","Personalizado"],
-                       index=2, label_visibility="collapsed")
-
-    if periodo == "Hoje":            data_ini, data_fim = hoje, hoje
-    elif periodo == "7 dias":        data_ini, data_fim = hoje-timedelta(7), hoje
-    elif periodo == "30 dias":       data_ini, data_fim = hoje-timedelta(30), hoje
-    elif periodo == "Total":         data_ini, data_fim = date(2020,1,1), hoje
+    if periodo == "Hoje":       data_ini, data_fim = hoje, hoje
+    elif periodo == "7 dias":   data_ini, data_fim = hoje-timedelta(7), hoje
+    elif periodo == "30 dias":  data_ini, data_fim = hoje-timedelta(30), hoje
+    elif periodo == "Total":    data_ini, data_fim = date(2020,1,1), hoje
     else:
-        ca, cb = st.columns(2)
+        ca,cb = st.columns(2)
         data_ini = ca.date_input("De",  value=hoje-timedelta(30), label_visibility="collapsed")
         data_fim = cb.date_input("Até", value=hoje,               label_visibility="collapsed")
 
-    st.markdown('<div style="height:1px;background:#1c1c1e;margin:20px 0"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0"></div>', unsafe_allow_html=True)
+
+    if st.button(f"{BTN_ICON}  {BTN_TXT}"):
+        st.session_state.dark = not st.session_state.dark
+        st.rerun()
+
     if st.button("⟳  Atualizar dados"):
         st.cache_data.clear(); st.rerun()
-    st.markdown(f'<div style="color:#3f3f46;font-size:11px;margin-top:8px;text-align:center">auto-refresh · 60s</div>', unsafe_allow_html=True)
+
+    st.markdown(f'<div style="color:{MUTED2};font-size:11px;margin-top:10px;text-align:center">auto-refresh · 60s</div>',
+                unsafe_allow_html=True)
 
 
 # ── load & filter ─────────────────────────────────────────────────────────────
@@ -294,62 +298,63 @@ tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_geral:
-    total   = len(df)
-    leads_sp= int(df["DDD"].isin(SP_DDDS).sum()) if "DDD" in df.columns else 0
-    gasto   = get_meta_spend(since_str, until_str)
-    cpl     = (gasto/total) if gasto and total else None
-    pct_sp  = f"{leads_sp/total*100:.0f}% do total" if total else ""
+    total    = len(df)
+    leads_sp = int(df["DDD"].isin(SP_DDDS).sum()) if "DDD" in df.columns else 0
+    gasto    = get_meta_spend(since_str, until_str)
+    cpl      = (gasto/total) if gasto and total else None
+    pct_sp   = f"{leads_sp/total*100:.0f}% do total" if total else ""
 
-    # ── KPIs ──────────────────────────────────────────────────────────────────
-    k1,k2,k3,k4 = st.columns(4, gap="small")
-    k1.markdown(kpi("#6366f1","Total de Leads",   fmt_num(total)), unsafe_allow_html=True)
-    k2.markdown(kpi("#10b981","Valor Gasto",      fmt_brl(gasto) if gasto else "—",
-                    sub="" if gasto else "Configure o token Meta", sub_gray=not gasto), unsafe_allow_html=True)
-    k3.markdown(kpi("#f59e0b","Custo por Lead",   fmt_brl(cpl) if cpl else "—"), unsafe_allow_html=True)
-    k4.markdown(kpi("#f97316","Leads em SP",      fmt_num(leads_sp), pct_sp), unsafe_allow_html=True)
+    # KPIs
+    k1,k2,k3,k4 = st.columns(4, gap="medium")
+    k1.markdown(kpi_html("#6366f1","Total de Leads", fmt_num(total)), unsafe_allow_html=True)
+    k2.markdown(kpi_html("#10b981","Valor Gasto",
+                fmt_brl(gasto) if gasto else "—",
+                sub="" if gasto else "Configure o token Meta", sub_gray=not gasto), unsafe_allow_html=True)
+    k3.markdown(kpi_html("#f59e0b","Custo por Lead", fmt_brl(cpl) if cpl else "—"), unsafe_allow_html=True)
+    k4.markdown(kpi_html("#f97316","Leads em SP",    fmt_num(leads_sp), pct_sp), unsafe_allow_html=True)
 
     if df.empty:
         st.info("Nenhum lead no período."); st.stop()
 
-    # ── Mapa + Barra ───────────────────────────────────────────────────────────
-    sec("Distribuição Geográfica")
-    cm, cb_ = st.columns([3,2], gap="medium")
-    with cm:
-        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Estado de São Paulo · por DDD</p>', unsafe_allow_html=True)
-        st.plotly_chart(build_map(df), use_container_width=True, config={"displayModeBar":False})
-    with cb_:
-        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Top DDDs · todos os estados</p>', unsafe_allow_html=True)
-        st.plotly_chart(build_bar(df), use_container_width=True, config={"displayModeBar":False})
+    # Mapa full width
+    sec("Distribuição Geográfica — Estado de São Paulo")
+    chart_sub("Bolhas proporcionais ao volume de leads por DDD")
+    st.plotly_chart(build_map(df), use_container_width=True, config={"displayModeBar":False})
 
-    # ── Evolução ──────────────────────────────────────────────────────────────
-    sec("Evolução Diária de Leads")
-    st.plotly_chart(build_area(df), use_container_width=True, config={"displayModeBar":False})
+    # Linha + Fonte lado a lado
+    sec("Evolução & Origem")
+    ca, cb = st.columns([3,2], gap="medium")
+    with ca:
+        chart_sub("Leads por dia")
+        st.plotly_chart(build_area(df), use_container_width=True, config={"displayModeBar":False})
+    with cb:
+        chart_sub("Leads por fonte")
+        st.plotly_chart(build_bar_fonte(df, total), use_container_width=True, config={"displayModeBar":False})
 
-    # ── Tabelas ───────────────────────────────────────────────────────────────
+    # Tabelas
     sec("Métricas Detalhadas")
     td, tf = st.columns(2, gap="medium")
 
     with td:
-        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Por DDD</p>', unsafe_allow_html=True)
+        chart_sub("Por DDD")
         if "DDD" in df.columns:
             r = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().reset_index()
             r.columns = ["DDD","Leads"]
-            r["Cidade"] = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("cidade","—"))
-            r["Estado"] = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("estado","—"))
+            r["Cidade"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("cidade","—"))
+            r["Estado"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("estado","—"))
             r["% Total"] = (r["Leads"]/total*100).round(1).astype(str)+"%"
             st.dataframe(r[["DDD","Cidade","Estado","Leads","% Total"]],
-                         use_container_width=True, hide_index=True, height=320)
+                         use_container_width=True, hide_index=True, height=300)
 
     with tf:
-        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Por Fonte</p>', unsafe_allow_html=True)
+        chart_sub("Por Fonte")
         if "FONTE" in df.columns:
             rf = df["FONTE"].fillna("Não informado").value_counts().reset_index()
             rf.columns = ["Fonte","Leads"]
             rf["% Total"] = (rf["Leads"]/total*100).round(1).astype(str)+"%"
-            if cpl:
-                rf["CPL Est."] = fmt_brl(cpl)
-            st.dataframe(rf[["Fonte","Leads","% Total"] + (["CPL Est."] if cpl else [])],
-                         use_container_width=True, hide_index=True, height=320)
+            if cpl: rf["CPL Est."] = fmt_brl(cpl)
+            st.dataframe(rf[["Fonte","Leads","% Total"]+(["CPL Est."] if cpl else [])],
+                         use_container_width=True, hide_index=True, height=300)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -357,13 +362,11 @@ with tab_leads:
     if df.empty:
         st.info("Nenhum lead no período.")
     else:
-        c_search, c_count = st.columns([3,1])
-        with c_search:
-            search = st.text_input("", placeholder="🔍  Buscar por nome ou e-mail...",
-                                   label_visibility="collapsed")
-        with c_count:
-            st.markdown(f'<div style="color:#52525b;font-size:12px;padding:10px 0;text-align:right">'
-                        f'{fmt_num(len(df))} leads</div>', unsafe_allow_html=True)
+        cs, cc = st.columns([3,1])
+        search = cs.text_input("", placeholder="🔍  Buscar por nome ou e-mail...",
+                               label_visibility="collapsed")
+        cc.markdown(f'<div style="color:{MUTED2};font-size:12px;padding:10px 0;text-align:right">'
+                    f'{fmt_num(len(df))} leads</div>', unsafe_allow_html=True)
 
         df_show = df.copy()
         if search:

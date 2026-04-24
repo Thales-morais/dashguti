@@ -142,8 +142,31 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 div[data-testid="stSelectbox"] > label  {{ color:{MUTED} !important; font-size:11px !important; font-weight:600 !important; letter-spacing:.08em !important; text-transform:uppercase !important; }}
 div[data-testid="stSelectbox"] > div > div {{ background:{SURF} !important; border:1px solid {BORDER} !important; border-radius:12px !important; color:{TXT} !important; box-shadow:{SHADOW}; }}
 
-/* ── sidebar icon buttons ── */
-section[data-testid="stSidebar"] .stButton>button {{
+/* ── sidebar nav ── */
+section[data-testid="stSidebar"] .stRadio {{ margin:0; }}
+section[data-testid="stSidebar"] .stRadio > label {{ display:none; }}
+section[data-testid="stSidebar"] .stRadio [role="radiogroup"] {{
+  display:flex; flex-direction:column; gap:2px;
+}}
+section[data-testid="stSidebar"] .stRadio [role="radiogroup"] label {{
+  display:flex; align-items:center; padding:9px 12px;
+  border-radius:12px; cursor:pointer;
+  color:{MUTED}; font-size:13px; font-weight:500;
+  transition:background .15s, color .15s;
+  border:1px solid transparent;
+}}
+section[data-testid="stSidebar"] .stRadio [role="radiogroup"] label:has(input:checked) {{
+  background:{SURF}; color:{TXT}; font-weight:600;
+  border-color:{BORDER};
+}}
+section[data-testid="stSidebar"] .stRadio [role="radiogroup"] label:hover:not(:has(input:checked)) {{
+  background:{SURF}; color:{TXT}; opacity:.7;
+}}
+section[data-testid="stSidebar"] .stRadio [role="radiogroup"] input[type="radio"] {{
+  display:none;
+}}
+
+
   background:{SURF} !important; color:{MUTED} !important;
   border:1px solid {BORDER} !important; border-radius:10px !important;
   height:34px !important; min-height:0 !important; max-height:34px !important;
@@ -243,14 +266,13 @@ def _fetch_table(table: str) -> pd.DataFrame:
         offset += page
     return pd.DataFrame(rows)
 
-def load_leads(projetos: tuple) -> pd.DataFrame:
-    """Combina leads dos projetos selecionados, cada um cacheado individualmente."""
+def load_leads(projetos: tuple, proj_map: tuple) -> pd.DataFrame:
+    """Combina leads dos projetos da página, cada tabela cacheada individualmente."""
     frames = []
-    for nome, table in PROJETOS.items():
-        if nome in projetos:
-            df = _fetch_table(table)
-            df["PROJETO"] = nome
-            frames.append(df)
+    for nome, table in proj_map:
+        df = _fetch_table(table)
+        df["PROJETO"] = nome
+        frames.append(df)
     if not frames:
         return pd.DataFrame()
     return _process_df(pd.concat(frames, ignore_index=True))
@@ -355,25 +377,37 @@ def bar_fonte(df):
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
+
+# Páginas disponíveis — adicione novas entradas aqui conforme criar tabelas no Supabase
+# formato: "Label no menu": {"tabelas": [...], "descricao": "..."}
+PAGINAS = {
+    "🏠  Geral": {
+        "tabelas": list(PROJETOS.values()),
+        "projetos": PROJETOS,
+    },
+    # Exemplo de como adicionar futuramente:
+    # "🏡  Latidah Visita": {"tabelas": ["lead_latidah_visita"], "projetos": {"Latidah Visita": "lead_latidah_visita"}},
+}
+
 with st.sidebar:
-    # header: título + ícones lado a lado
     c_title, c_theme, c_refresh = st.columns([5, 1, 1])
     with c_title:
         st.markdown(f"""
         <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em;line-height:1.1">DashGuti</div>
-        <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Multi-projeto · Analytics</div>
+        <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Analytics</div>
         """, unsafe_allow_html=True)
     if c_theme.button(BTN_ICON, use_container_width=True):
         st.session_state.dark = not D; st.rerun()
     if c_refresh.button("⟳", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
-    st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 20px"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 12px"></div>', unsafe_allow_html=True)
 
-    projeto_sel = st.selectbox("PROJETO", ["Todos"] + list(PROJETOS.keys()), index=0)
-    projetos_ativos = tuple(PROJETOS.keys()) if projeto_sel == "Todos" else (projeto_sel,)
+    pagina_sel = st.radio("", list(PAGINAS.keys()), label_visibility="collapsed")
+    pagina_cfg = PAGINAS[pagina_sel]
+    projetos_ativos = tuple(pagina_cfg["projetos"].keys())
 
-    st.markdown(f'<div style="height:1px;background:{BORDER};margin:16px 0 16px"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
 
     hoje    = datetime.now(tz=BRASILIA).date()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
@@ -394,7 +428,7 @@ since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
 
 with st.spinner(""):
-    try:    df_all = load_leads(projetos_ativos); erro = None
+    try:    df_all = load_leads(projetos_ativos, tuple(pagina_cfg["projetos"].items())); erro = None
     except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:
@@ -440,11 +474,12 @@ with tab_geral:
         st.info("Nenhum lead encontrado no período."); st.stop()
 
     # KPIs — linha 2: breakdown por projeto (mesmo estilo da linha 1)
-    if projeto_sel == "Todos" and "PROJETO" in df.columns:
-        proj_colors = {"Trampah": PURPLE, "Latidah": GREEN, "Vigilha": AMBER}
+    proj_colors = {"Trampah": PURPLE, "Latidah": GREEN, "Vigilha": AMBER}
+    projs = pagina_cfg["projetos"]
+    if len(projs) > 1 and "PROJETO" in df.columns:
         st.markdown('<div style="margin-top:16px"></div>', unsafe_allow_html=True)
-        p1, p2, p3, _ = st.columns(4, gap="medium")
-        for col, (nome, _tbl) in zip([p1, p2, p3], PROJETOS.items()):
+        proj_cols = st.columns(4, gap="medium")
+        for col, (nome, _tbl) in zip(proj_cols, projs.items()):
             n = int((df["PROJETO"] == nome).sum())
             pct = f"{n/total*100:.0f}% do total" if total else ""
             c = proj_colors.get(nome, ORANGE)

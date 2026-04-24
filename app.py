@@ -78,6 +78,10 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
   padding:24px;
   position:relative;
   overflow:hidden;
+  height:148px;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-start;
   transition:transform .2s, box-shadow .2s;
   box-shadow:{SHADOW};
 }}
@@ -87,9 +91,18 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
   width:100px; height:100px; border-radius:50%;
   opacity:.12; filter:blur(25px);
 }}
-.kpi-label {{ color:{MUTED}; font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin-bottom:12px; }}
-.kpi-value {{ color:{TXT}; font-size:36px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-bottom:8px; font-variant-numeric:tabular-nums; }}
+.kpi-label {{ color:{MUTED}; font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin-bottom:10px; }}
+.kpi-value {{ color:{TXT}; font-size:34px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-bottom:10px; font-variant-numeric:tabular-nums; flex:1; }}
 .kpi-badge {{ display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; }}
+
+/* ── content cards (chart/table containers) ── */
+[data-testid="stVerticalBlockBorderWrapper"] {{
+  background:{SURF} !important;
+  border:1px solid {BORDER} !important;
+  border-radius:20px !important;
+  padding:4px 4px !important;
+  box-shadow:{SHADOW} !important;
+}}
 
 /* ── section header ── */
 .sec {{ display:flex; align-items:center; gap:12px; margin:36px 0 16px; }}
@@ -356,43 +369,47 @@ with tab_geral:
     section("Evolução & Origem")
     ca, cb = st.columns([3,2], gap="medium")
     with ca:
-        st.markdown(f'<div class="chart-title">Leads por dia</div>'
-                    f'<div class="chart-sub">Volume diário no período selecionado</div>',
-                    unsafe_allow_html=True)
-        st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
+        with st.container(border=True):
+            st.markdown(f'<div class="chart-title">Leads por dia</div>'
+                        f'<div class="chart-sub">Volume diário no período selecionado</div>',
+                        unsafe_allow_html=True)
+            st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
     with cb:
-        st.markdown(f'<div class="chart-title">Leads por fonte</div>'
-                    f'<div class="chart-sub">Distribuição por canal de aquisição</div>',
-                    unsafe_allow_html=True)
-        st.plotly_chart(bar_fonte(df), use_container_width=True, config={"displayModeBar":False})
+        with st.container(border=True):
+            st.markdown(f'<div class="chart-title">Leads por fonte</div>'
+                        f'<div class="chart-sub">Distribuição por canal de aquisição</div>',
+                        unsafe_allow_html=True)
+            st.plotly_chart(bar_fonte(df), use_container_width=True, config={"displayModeBar":False})
 
     # Tabelas
     section("Métricas Detalhadas")
     td, tf = st.columns(2, gap="medium")
 
     with td:
-        st.markdown(f'<div class="chart-title" style="margin-bottom:12px">Por DDD</div>',
-                    unsafe_allow_html=True)
-        if "DDD" in df.columns:
-            r = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().reset_index()
-            r.columns = ["DDD","Leads"]
-            r["Cidade"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("cidade","—"))
-            r["Estado"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("estado","—"))
-            r["% Total"] = (r["Leads"]/total*100).round(1).astype(str)+"%"
-            st.dataframe(r[["DDD","Cidade","Estado","Leads","% Total"]],
-                         use_container_width=True, hide_index=True, height=320)
+        with st.container(border=True):
+            st.markdown(f'<div class="chart-title" style="margin-bottom:12px">Por DDD</div>',
+                        unsafe_allow_html=True)
+            if "DDD" in df.columns:
+                r = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().reset_index()
+                r.columns = ["DDD","Leads"]
+                r["Cidade"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("cidade","—"))
+                r["Estado"]  = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("estado","—"))
+                r["% Total"] = (r["Leads"]/total*100).round(1).astype(str)+"%"
+                st.dataframe(r[["DDD","Cidade","Estado","Leads","% Total"]],
+                             use_container_width=True, hide_index=True, height=320)
 
     with tf:
-        st.markdown(f'<div class="chart-title" style="margin-bottom:12px">Por Fonte</div>',
-                    unsafe_allow_html=True)
-        if "FONTE" in df.columns:
-            rf = df["FONTE"].fillna("Não informado").value_counts().reset_index()
-            rf.columns = ["Fonte","Leads"]
-            rf["Fonte"]   = rf["Fonte"].str.replace("_"," ").str.title()
-            rf["% Total"] = (rf["Leads"]/total*100).round(1).astype(str)+"%"
-            if cpl: rf["CPL Est."] = fmt_brl(cpl)
-            st.dataframe(rf[["Fonte","Leads","% Total"]+(["CPL Est."] if cpl else [])],
-                         use_container_width=True, hide_index=True, height=320)
+        with st.container(border=True):
+            st.markdown(f'<div class="chart-title" style="margin-bottom:12px">Por Fonte</div>',
+                        unsafe_allow_html=True)
+            if "FONTE" in df.columns:
+                rf = df["FONTE"].fillna("Não informado").value_counts().reset_index()
+                rf.columns = ["Fonte","Leads"]
+                rf["Fonte"]   = rf["Fonte"].str.replace("_"," ").str.title()
+                rf["% Total"] = (rf["Leads"]/total*100).round(1).astype(str)+"%"
+                if cpl: rf["CPL Est."] = fmt_brl(cpl)
+                st.dataframe(rf[["Fonte","Leads","% Total"]+(["CPL Est."] if cpl else [])],
+                             use_container_width=True, hide_index=True, height=320)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

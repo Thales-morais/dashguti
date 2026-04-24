@@ -283,7 +283,7 @@ def load_reinoh() -> pd.DataFrame:
     rows, offset, page = [], 0, 1000
     while True:
         url = (f"{SUPABASE_URL}/rest/v1/reinoh_val"
-               f"?select=*&order=data_de_cadastro.desc&limit={page}&offset={offset}")
+               f"?select=*&limit={page}&offset={offset}")
         r = requests.get(url, headers=hdrs, timeout=15)
         r.raise_for_status()
         batch = r.json()
@@ -293,9 +293,12 @@ def load_reinoh() -> pd.DataFrame:
     if not rows: return pd.DataFrame()
     df = pd.DataFrame(rows)
     df.columns = [c.strip().upper() for c in df.columns]
-    if "DATA_DE_CADASTRO" in df.columns:
-        df["DATA"] = (pd.to_datetime(df["DATA_DE_CADASTRO"], errors="coerce", utc=True)
+    # detecta coluna de data (pode ter nomes diferentes dependendo de como foi criada no Supabase)
+    date_col = next((c for c in df.columns if "DATA" in c or "DATE" in c or "CADASTRO" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
                       .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.strip()
         def _ddd(t):

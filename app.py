@@ -93,15 +93,15 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 .icon-btn:hover {{ border-color:{ORANGE}; color:{ORANGE}; }}
 
 /* ── KPI cards ── */
-.kpi-wrap {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:32px; }}
+.kpi-wrap {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }}
 .kpi {{
   background:{SURF};
   border:1px solid {BORDER};
   border-radius:20px;
-  padding:24px;
+  padding:22px 24px;
   position:relative;
   overflow:hidden;
-  height:148px;
+  height:140px;
   display:flex;
   flex-direction:column;
   justify-content:flex-start;
@@ -114,9 +114,23 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
   width:100px; height:100px; border-radius:50%;
   opacity:.12; filter:blur(25px);
 }}
-.kpi-label {{ color:{MUTED}; font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin-bottom:10px; }}
-.kpi-value {{ color:{TXT}; font-size:34px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-bottom:10px; font-variant-numeric:tabular-nums; flex:1; }}
-.kpi-badge {{ display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; }}
+.kpi-label {{ color:{MUTED}; font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; margin-bottom:8px; }}
+.kpi-value {{ color:{TXT}; font-size:32px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-bottom:10px; font-variant-numeric:tabular-nums; flex:1; }}
+.kpi-badge {{ display:inline-flex; align-self:flex-start; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:600; width:fit-content; }}
+
+/* ── project breakdown bar ── */
+.proj-bar {{
+  display:flex; gap:12px; margin-bottom:28px;
+}}
+.proj-chip {{
+  flex:1; background:{SURF}; border:1px solid {BORDER}; border-radius:16px;
+  padding:14px 18px; display:flex; align-items:center; justify-content:space-between;
+  box-shadow:{SHADOW};
+}}
+.proj-chip-left {{ display:flex; flex-direction:column; gap:3px; }}
+.proj-chip-name {{ font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }}
+.proj-chip-pct  {{ font-size:11px; color:{MUTED}; font-weight:500; }}
+.proj-chip-val  {{ font-size:26px; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }}
 
 /* ── content cards (chart/table containers) ── */
 [data-testid="stVerticalBlockBorderWrapper"] {{
@@ -128,7 +142,7 @@ section[data-testid="stSidebar"] > div {{ padding:2rem 1.25rem; }}
 }}
 
 /* ── section header ── */
-.sec {{ display:flex; align-items:center; gap:12px; margin:36px 0 16px; }}
+.sec {{ display:flex; align-items:center; gap:12px; margin:28px 0 14px; }}
 .sec-pill {{ background:linear-gradient(135deg,{ORANGE},{AMBER}); border-radius:999px; padding:3px 12px; font-size:10px; font-weight:700; color:#fff; letter-spacing:.1em; text-transform:uppercase; }}
 .sec-line {{ flex:1; height:1px; background:{BORDER}; }}
 
@@ -435,18 +449,24 @@ with tab_geral:
     if df.empty:
         st.info("Nenhum lead encontrado no período."); st.stop()
 
-    # Breakdown por projeto (só quando "Todos" estiver selecionado)
+    # Breakdown por projeto — barra compacta
     if projeto_sel == "Todos" and "PROJETO" in df.columns:
         proj_colors = {"Trampah": PURPLE, "Latidah": GREEN, "Vigilha": AMBER}
-        cols_p = st.columns(len(PROJETOS), gap="medium")
-        for col, (nome, _) in zip(cols_p, PROJETOS.items()):
-            n = int((df["PROJETO"] == nome).sum())
-            pct = f"{n/total*100:.0f}% do total" if total else ""
-            c = proj_colors.get(nome, ORANGE)
-            col.markdown(kpi_card(c, nome, fmt_num(n), badge=pct,
-                                  badge_color=f"rgba({int(c[1:3],16)},{int(c[3:5],16)},{int(c[5:7],16)},.12)",
-                                  badge_txt=c),
-                         unsafe_allow_html=True)
+        chips = ""
+        for nome in PROJETOS:
+            n   = int((df["PROJETO"] == nome).sum())
+            pct = f"{n/total*100:.0f}% do total" if total else "—"
+            c   = proj_colors.get(nome, ORANGE)
+            dot = f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{c};margin-right:6px"></span>'
+            chips += f"""
+            <div class="proj-chip">
+              <div class="proj-chip-left">
+                <div class="proj-chip-name" style="color:{c}">{dot}{nome}</div>
+                <div class="proj-chip-pct">{pct}</div>
+              </div>
+              <div class="proj-chip-val" style="color:{TXT}">{fmt_num(n)}</div>
+            </div>"""
+        st.markdown(f'<div class="proj-bar">{chips}</div>', unsafe_allow_html=True)
 
     # Mapa
     section("Distribuição Geográfica")

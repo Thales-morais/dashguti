@@ -2,6 +2,7 @@ import os, json, re, requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 from datetime import date, timedelta
 from dotenv import load_dotenv
 from ddd_coords import DDD_INFO
@@ -19,6 +20,9 @@ SP_DDDS      = {"11","12","13","14","15","16","17","18","19"}
 
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
+
+# recarrega a página e invalida o cache a cada 60 s
+st_autorefresh(interval=60_000, key="autorefresh")
 
 if "dark" not in st.session_state:
     st.session_state.dark = True

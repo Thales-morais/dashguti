@@ -417,21 +417,46 @@ with tab_geral:
     st.plotly_chart(build_line_daily(df), use_container_width=True, config={"displayModeBar": False})
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Tabela resumo
-    st.markdown('<div class="section-title">Resumo por DDD</div>', unsafe_allow_html=True)
-    if "DDD" in df.columns:
-        resumo = (
-            df["DDD"].dropna().astype(str).str.zfill(2)
-            .value_counts().reset_index()
-            .rename(columns={"DDD": "DDD", "count": "Leads"})
-        )
-        resumo["Cidade"] = resumo["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("cidade", "—"))
-        resumo["Estado"] = resumo["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("estado", "—"))
-        resumo["% do total"] = (resumo["Leads"] / total_leads * 100).round(1).astype(str) + "%"
-        st.dataframe(
-            resumo[["DDD", "Cidade", "Estado", "Leads", "% do total"]],
-            use_container_width=True, hide_index=True,
-        )
+    # Tabelas lado a lado
+    st.markdown('<div class="section-title">Métricas Detalhadas</div>', unsafe_allow_html=True)
+    t1, t2 = st.columns(2, gap="medium")
+
+    with t1:
+        st.markdown("**Por DDD**")
+        if "DDD" in df.columns:
+            resumo_ddd = (
+                df["DDD"].dropna().astype(str).str.zfill(2)
+                .value_counts().reset_index()
+                .rename(columns={"DDD": "DDD", "count": "Leads"})
+            )
+            resumo_ddd["Cidade"] = resumo_ddd["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("cidade", "—"))
+            resumo_ddd["Estado"] = resumo_ddd["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("estado", "—"))
+            resumo_ddd["% Total"] = (resumo_ddd["Leads"] / total_leads * 100).round(1).astype(str) + "%"
+            st.dataframe(
+                resumo_ddd[["DDD", "Cidade", "Estado", "Leads", "% Total"]],
+                use_container_width=True, hide_index=True, height=350,
+            )
+
+    with t2:
+        st.markdown("**Por Origem (Fonte)**")
+        if "FONTE" in df.columns:
+            resumo_fonte = (
+                df["FONTE"].fillna("Não informado")
+                .value_counts().reset_index()
+                .rename(columns={"FONTE": "Fonte", "count": "Leads"})
+            )
+            resumo_fonte["% Total"] = (resumo_fonte["Leads"] / total_leads * 100).round(1).astype(str) + "%"
+            if cpl is not None:
+                resumo_fonte["CPL Est."] = resumo_fonte["Leads"].apply(
+                    lambda l: fmt_brl(valor_gasto * l / total_leads / l) if l > 0 else "—"
+                )
+                cols_fonte = ["Fonte", "Leads", "% Total", "CPL Est."]
+            else:
+                cols_fonte = ["Fonte", "Leads", "% Total"]
+            st.dataframe(
+                resumo_fonte[cols_fonte],
+                use_container_width=True, hide_index=True, height=350,
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -319,8 +319,9 @@ with st.spinner(""):
 if erro:
     st.error(f"Erro ao carregar planilha: {erro}"); st.stop()
 
-if "DATA" in df_all.columns and not df_all.empty:
-    df = df_all[(df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)].copy()
+if "DATA" in df_all.columns and not df_all.empty and periodo != "Total":
+    mask = (df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)
+    df = df_all[mask].copy()
 else:
     df = df_all.copy()
 

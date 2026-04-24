@@ -17,9 +17,12 @@ SHEETS_CSV_URL = (
     "2PACX-1vTch090fHoZlOtOE7Q89ejnSsvfcOSqAJg5M4ZZG1ly5kYneptpVTuudvWvJkbE2l3gkAPa_lASvYlN"
     "/pub?gid=0&single=true&output=csv"
 )
-META_TOKEN   = os.getenv("META_ACCESS_TOKEN", "")
-META_ACCOUNT = os.getenv("META_AD_ACCOUNT_ID", "")
-SP_DDDS      = {"11","12","13","14","15","16","17","18","19"}
+META_TOKEN    = os.getenv("META_ACCESS_TOKEN", "")
+META_ACCOUNT  = os.getenv("META_AD_ACCOUNT_ID", "")
+SUPABASE_URL  = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY  = os.getenv("SUPABASE_KEY", "")
+TABLE         = "lead_guti_trampah"
+SP_DDDS       = {"11","12","13","14","15","16","17","18","19"}
 
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
@@ -193,23 +196,45 @@ def section(label):
 
 
 # ── dados ─────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
-def load_leads():
-    df = pd.read_csv(SHEETS_CSV_URL)
+def _process_df(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [c.strip().upper() for c in df.columns]
     if "DATA" in df.columns:
-        s = df["DATA"].astype(str).str.extract(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})")[0]
-        # interpreta como UTC (padrão do n8n) e converte para horário de Brasília
-        df["DATA"] = pd.to_datetime(s, errors="coerce", utc=True).dt.tz_convert(BRASILIA).dt.tz_localize(None)
+        df["DATA"] = (
+            pd.to_datetime(df["DATA"], errors="coerce", utc=True)
+            .dt.tz_convert(BRASILIA)
+            .dt.tz_localize(None)
+        )
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.strip()
         def _ddd(t):
-            digits = re.sub(r"\D", "", t)  # remove tudo que não é dígito: (, ), -, espaço, p:+, etc.
+            digits = re.sub(r"\D", "", t)
             if len(digits) < 2: return None
             candidate = digits[2:4] if digits.startswith("55") and len(digits) >= 12 else digits[:2]
             return candidate if candidate in DDD_INFO else None
         df["DDD"] = tel.apply(_ddd)
     return df
+
+@st.cache_data(ttl=20)
+def load_leads():
+    """Lê todos os leads do Supabase com paginação."""
+    hdrs = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Prefer": "count=none",
+    }
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = (f"{SUPABASE_URL}/rest/v1/{TABLE}"
+               f"?select=DATA,NOME,EMAIL,TELEFONE,FONTE"
+               f"&order=DATA.desc&limit={page}&offset={offset}")
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page:
+            break
+        offset += page
+    return _process_df(pd.DataFrame(rows))
 
 @st.cache_data(ttl=300)
 def get_spend(since, until):

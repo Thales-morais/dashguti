@@ -2,7 +2,6 @@ import os, json, re, requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
@@ -32,9 +31,6 @@ PROJETOS = {
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
-# recarrega a página a cada 60s via JavaScript nativo (sem pacote externo)
-components.html("<script>setTimeout(()=>window.parent.location.reload(),60000)</script>",
-                height=0)
 
 if "dark" not in st.session_state:
     st.session_state.dark = True
@@ -385,8 +381,6 @@ with st.sidebar:
         data_ini = ca.date_input("De",  hoje-timedelta(30), label_visibility="collapsed")
         data_fim = cb.date_input("Até", hoje,               label_visibility="collapsed")
 
-    st.markdown(f'<p style="color:{MUTED2};font-size:11px;text-align:center;margin-top:20px">auto-refresh a cada 60s</p>',
-                unsafe_allow_html=True)
 
 
 # ── dados ─────────────────────────────────────────────────────────────────────

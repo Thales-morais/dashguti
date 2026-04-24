@@ -277,6 +277,35 @@ def load_leads(projetos: tuple, proj_map: tuple) -> pd.DataFrame:
         return pd.DataFrame()
     return _process_df(pd.concat(frames, ignore_index=True))
 
+@st.cache_data(ttl=20)
+def load_reinoh() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = (f"{SUPABASE_URL}/rest/v1/reinoh_val"
+               f"?select=*&order=data_de_cadastro.desc&limit={page}&offset={offset}")
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df.columns = [c.strip().upper() for c in df.columns]
+    if "DATA_DE_CADASTRO" in df.columns:
+        df["DATA"] = (pd.to_datetime(df["DATA_DE_CADASTRO"], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+    if "TELEFONE" in df.columns:
+        tel = df["TELEFONE"].fillna("").astype(str).str.strip()
+        def _ddd(t):
+            digits = re.sub(r"\D", "", t)
+            if len(digits) < 2: return None
+            candidate = digits[2:4] if digits.startswith("55") and len(digits) >= 12 else digits[:2]
+            return candidate if candidate in DDD_INFO else None
+        df["DDD"] = tel.apply(_ddd)
+    return df
+
 @st.cache_data(ttl=300)
 def get_spend(since, until):
     if not META_TOKEN or not META_ACCOUNT: return None
@@ -382,11 +411,13 @@ def bar_fonte(df):
 # formato: "Label no menu": {"tabelas": [...], "descricao": "..."}
 PAGINAS = {
     "🏠  Geral": {
-        "tabelas": list(PROJETOS.values()),
+        "tipo": "leads",
         "projetos": PROJETOS,
     },
-    # Exemplo de como adicionar futuramente:
-    # "🏡  Latidah Visita": {"tabelas": ["lead_latidah_visita"], "projetos": {"Latidah Visita": "lead_latidah_visita"}},
+    "🏛️  Reinoh": {
+        "tipo": "reinoh",
+        "tabela": "reinoh_val",
+    },
 }
 
 with st.sidebar:
@@ -408,17 +439,18 @@ with st.sidebar:
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
 
-    # Filtro de projeto — só aparece quando a página tem múltiplos projetos (ex: Geral)
-    if len(pagina_cfg["projetos"]) > 1:
-        projeto_sel = st.selectbox("PROJETO", ["Todos"] + list(pagina_cfg["projetos"].keys()), index=0)
-        proj_map = list(pagina_cfg["projetos"].items()) if projeto_sel == "Todos" \
-                   else [(projeto_sel, pagina_cfg["projetos"][projeto_sel])]
-        st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
-    else:
-        projeto_sel = list(pagina_cfg["projetos"].keys())[0]
-        proj_map    = list(pagina_cfg["projetos"].items())
-
-    projetos_ativos = tuple(n for n, _ in proj_map)
+    # Filtro de projeto — só na aba Geral (tipo leads com múltiplos projetos)
+    if pagina_cfg.get("tipo") == "leads":
+        projs = pagina_cfg["projetos"]
+        if len(projs) > 1:
+            projeto_sel = st.selectbox("PROJETO", ["Todos"] + list(projs.keys()), index=0)
+            proj_map = list(projs.items()) if projeto_sel == "Todos" \
+                       else [(projeto_sel, projs[projeto_sel])]
+            st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+        else:
+            projeto_sel = list(projs.keys())[0]
+            proj_map    = list(projs.items())
+        projetos_ativos = tuple(n for n, _ in proj_map)
 
     hoje    = datetime.now(tz=BRASILIA).date()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
@@ -434,16 +466,22 @@ with st.sidebar:
 
 
 
-# ── dados ─────────────────────────────────────────────────────────────────────
+# ── roteador de páginas ───────────────────────────────────────────────────────
 since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
+tipo = pagina_cfg.get("tipo", "leads")
 
-with st.spinner(""):
-    try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
-    except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+if tipo == "reinoh":
+    with st.spinner(""):
+        try:    df_all = load_reinoh(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+else:
+    with st.spinner(""):
+        try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:
-    st.error(f"Erro ao carregar planilha: {erro}"); st.stop()
+    st.error(f"Erro ao carregar dados: {erro}"); st.stop()
 
 if "DATA" in df_all.columns and not df_all.empty and periodo != "Total":
     mask = (df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)
@@ -458,10 +496,143 @@ cpl      = (gasto/total) if gasto and total else None
 pct_sp   = f"{leads_sp/total*100:.0f}% do total" if total else ""
 
 
-# ── tabs ──────────────────────────────────────────────────────────────────────
-tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
+# ── renderização por tipo de página ───────────────────────────────────────────
+if tipo == "reinoh":
+    tab_vis, tab_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
+else:
+    tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════ REINOH ══════════════════════════════════════
+if tipo == "reinoh":
+    total_r  = len(df)
+    n_mun    = df["MUNICIPIO"].nunique()  if "MUNICIPIO"    in df.columns else 0
+    n_igr    = df["IGREJA"].nunique()     if "IGREJA"       in df.columns else 0
+    n_ind    = df["INDICADO_POR"].nunique() if "INDICADO_POR" in df.columns else 0
+
+    with tab_vis:
+        # KPIs
+        k1,k2,k3,k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE,"Total de Cadastros",fmt_num(total_r),
+                             badge=f"Período: {periodo}",badge_color="rgba(139,92,246,.12)",badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE,"Municípios",fmt_num(n_mun),
+                             badge="cidades alcançadas",badge_color="rgba(249,115,22,.12)",badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN,"Igrejas",fmt_num(n_igr),
+                             badge="denominações",badge_color="rgba(16,185,129,.12)",badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER,"Indicadores",fmt_num(n_ind),
+                             badge="pessoas indicando",badge_color="rgba(245,158,11,.12)",badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        if df.empty:
+            st.info("Nenhum cadastro no período."); st.stop()
+
+        # Crescimento diário
+        section("Crescimento")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Cadastros por dia</div>'
+                        '<div class="chart-sub">Evolução no período selecionado</div>',
+                        unsafe_allow_html=True)
+            st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
+
+        # Rede de indicação + Municípios
+        section("Rede de Indicação & Distribuição")
+        c1, c2 = st.columns(2, gap="medium")
+
+        with c1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Top Indicadores</div>'
+                            '<div class="chart-sub">Quem mais está trazendo cadastros</div>',
+                            unsafe_allow_html=True)
+                if "INDICADO_POR" in df.columns:
+                    ri = (df["INDICADO_POR"].fillna("Não informado")
+                          .value_counts().head(10).reset_index())
+                    ri.columns = ["Indicador","Qtd"]
+                    ri = ri.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=ri["Qtd"], y=ri["Indicador"], orientation="h",
+                        marker=dict(color=ri["Qtd"], colorscale=[[0,PURPLE],[1,ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=ri["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=320,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3,
+                    ))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        with c2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Por Município</div>'
+                            '<div class="chart-sub">Distribuição geográfica dos cadastros</div>',
+                            unsafe_allow_html=True)
+                if "MUNICIPIO" in df.columns:
+                    rm = (df["MUNICIPIO"].fillna("Não informado")
+                          .value_counts().head(10).reset_index())
+                    rm.columns = ["Município","Qtd"]
+                    rm = rm.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rm["Qtd"], y=rm["Município"], orientation="h",
+                        marker=dict(color=rm["Qtd"], colorscale=[[0,GREEN],[1,AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rm["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=320,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3,
+                    ))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        # Tabelas detalhadas
+        section("Métricas Detalhadas")
+        t1, t2 = st.columns(2, gap="medium")
+
+        with t1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Ranking de Indicadores</div>',
+                            unsafe_allow_html=True)
+                if "INDICADO_POR" in df.columns:
+                    ri2 = df["INDICADO_POR"].fillna("Não informado").value_counts().reset_index()
+                    ri2.columns = ["Indicador","Cadastros"]
+                    ri2["% Total"] = (ri2["Cadastros"]/total_r*100).round(1).astype(str)+"%"
+                    st.dataframe(ri2, use_container_width=True, hide_index=True, height=300)
+
+        with t2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Igreja</div>',
+                            unsafe_allow_html=True)
+                if "IGREJA" in df.columns:
+                    rig = df["IGREJA"].fillna("Não informada").value_counts().reset_index()
+                    rig.columns = ["Igreja","Cadastros"]
+                    rig["% Total"] = (rig["Cadastros"]/total_r*100).round(1).astype(str)+"%"
+                    st.dataframe(rig, use_container_width=True, hide_index=True, height=300)
+
+    with tab_cad:
+        cs, cc = st.columns([4,1])
+        search = cs.text_input("", placeholder="🔍  Buscar por nome, cidade, indicador...",
+                               label_visibility="collapsed")
+        cc.markdown(f'<p style="color:{MUTED2};font-size:12px;text-align:right;padding-top:10px">'
+                    f'{fmt_num(len(df))} registros</p>', unsafe_allow_html=True)
+        df_show = df.copy()
+        if search:
+            cols_busca = ["NOME","MUNICIPIO","IGREJA","INDICADO_POR","EMAIL"]
+            mask_s = pd.Series(False, index=df_show.index)
+            for c in cols_busca:
+                if c in df_show.columns:
+                    mask_s |= df_show[c].astype(str).str.contains(search, case=False, na=False)
+            df_show = df_show[mask_s]
+        show_cols = [c for c in ["DATA","NOME","MUNICIPIO","IGREJA","INDICADO_POR","STATUS","TELEFONE","EMAIL"]
+                     if c in df_show.columns]
+        st.dataframe(df_show[show_cols], use_container_width=True, hide_index=True, height=560)
+
+    st.stop()   # reinoh page complete — don't render leads tabs below
+
+# ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:
 
     # KPIs — linha 1

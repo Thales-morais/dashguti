@@ -405,9 +405,20 @@ with st.sidebar:
 
     pagina_sel = st.radio("", list(PAGINAS.keys()), label_visibility="collapsed")
     pagina_cfg = PAGINAS[pagina_sel]
-    projetos_ativos = tuple(pagina_cfg["projetos"].keys())
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+
+    # Filtro de projeto — só aparece quando a página tem múltiplos projetos (ex: Geral)
+    if len(pagina_cfg["projetos"]) > 1:
+        projeto_sel = st.selectbox("PROJETO", ["Todos"] + list(pagina_cfg["projetos"].keys()), index=0)
+        proj_map = list(pagina_cfg["projetos"].items()) if projeto_sel == "Todos" \
+                   else [(projeto_sel, pagina_cfg["projetos"][projeto_sel])]
+        st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+    else:
+        projeto_sel = list(pagina_cfg["projetos"].keys())[0]
+        proj_map    = list(pagina_cfg["projetos"].items())
+
+    projetos_ativos = tuple(n for n, _ in proj_map)
 
     hoje    = datetime.now(tz=BRASILIA).date()
     periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
@@ -428,7 +439,7 @@ since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
 
 with st.spinner(""):
-    try:    df_all = load_leads(projetos_ativos, tuple(pagina_cfg["projetos"].items())); erro = None
+    try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
     except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:

@@ -2,7 +2,6 @@ import os
 import json
 import requests
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from datetime import date, timedelta
@@ -16,470 +15,361 @@ SHEETS_CSV_URL = (
     "2PACX-1vTch090fHoZlOtOE7Q89ejnSsvfcOSqAJg5M4ZZG1ly5kYneptpVTuudvWvJkbE2l3gkAPa_lASvYlN"
     "/pub?gid=0&single=true&output=csv"
 )
-
 META_TOKEN   = os.getenv("META_ACCESS_TOKEN", "")
 META_ACCOUNT = os.getenv("META_AD_ACCOUNT_ID", "")
-SP_DDDS      = {"11", "12", "13", "14", "15", "16", "17", "18", "19"}
+SP_DDDS      = {"11","12","13","14","15","16","17","18","19"}
 
-st.set_page_config(
-    page_title="DashGuti",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ─────────────────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="DashGuti", page_icon="📊", layout="wide",
+                   initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-  /* fundo geral */
-  .stApp { background-color: #0d1117; }
-  section[data-testid="stSidebar"] { background-color: #0d1117; border-right: 1px solid #21262d; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-  /* remove padding padrão do main */
-  .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-  /* KPI card */
-  .kpi-card {
-    background: linear-gradient(135deg, #161b22 0%, #1c2333 100%);
-    border: 1px solid #30363d;
-    border-radius: 14px;
-    padding: 22px 24px;
-    text-align: center;
-    transition: border-color .2s;
-    height: 140px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  .kpi-card:hover { border-color: #f97316; }
-  .kpi-icon  { font-size: 20px; margin-bottom: 4px; }
-  .kpi-label { color: #8b949e; font-size: 11px; font-weight: 500;
-               letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
-  .kpi-value { color: #f0f6fc; font-size: 32px; font-weight: 700; line-height: 1.1; }
-  .kpi-sub   { color: #f97316; font-size: 11px; margin-top: 4px; }
+/* ── layout ── */
+.stApp                          { background: #09090b; }
+.block-container                { padding: 1.5rem 2rem 2rem 2rem; max-width: 100%; }
+section[data-testid="stSidebar"]{ background: #09090b; border-right: 1px solid #1c1c1e; }
 
-  /* section title */
-  .section-title {
-    color: #8b949e; font-size: 11px; font-weight: 600;
-    letter-spacing: .1em; text-transform: uppercase;
-    border-left: 3px solid #f97316; padding-left: 10px;
-    margin: 24px 0 12px 0;
-  }
+/* ── KPI card ── */
+.kpi {
+  background: #111113;
+  border: 1px solid #1c1c1e;
+  border-radius: 16px;
+  padding: 24px 20px;
+  height: 130px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: border-color .25s, box-shadow .25s;
+}
+.kpi:hover { border-color: #f97316; box-shadow: 0 0 0 1px #f9731622; }
+.kpi-top   { display: flex; align-items: center; gap: 8px; }
+.kpi-dot   { width: 8px; height: 8px; border-radius: 50%; background: #f97316; flex-shrink: 0; }
+.kpi-label { color: #71717a; font-size: 11px; font-weight: 500;
+             letter-spacing: .08em; text-transform: uppercase; }
+.kpi-value { color: #fafafa; font-size: 30px; font-weight: 700;
+             font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.kpi-sub   { color: #f97316; font-size: 11px; font-weight: 500; }
+.kpi-sub-gray { color: #52525b; font-size: 11px; }
 
-  /* chart card */
-  .chart-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 14px;
-    padding: 20px;
-  }
+/* ── section header ── */
+.sec {
+  display: flex; align-items: center; gap: 10px;
+  margin: 28px 0 14px 0;
+}
+.sec-line { width: 3px; height: 16px; background: #f97316; border-radius: 2px; flex-shrink:0; }
+.sec-text { color: #a1a1aa; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 
-  /* sidebar radio */
-  .stRadio label { color: #c9d1d9 !important; font-size: 14px !important; }
-  div[data-testid="stRadio"] > label { color: #8b949e !important; }
+/* ── chart wrap ── */
+[data-testid="stPlotlyChart"] {
+  border-radius: 14px !important;
+  overflow: hidden;
+}
 
-  /* tabs */
-  .stTabs [data-baseweb="tab-list"] { background: #161b22; border-radius: 10px; padding: 4px; }
-  .stTabs [data-baseweb="tab"] { color: #8b949e !important; border-radius: 8px; }
-  .stTabs [aria-selected="true"] { background: #21262d !important; color: #f0f6fc !important; }
+/* ── dataframe ── */
+[data-testid="stDataFrame"] > div { border-radius: 12px !important; overflow: hidden; }
+[data-testid="stDataFrame"] thead th { background: #111113 !important; color: #71717a !important;
+  font-size: 11px !important; letter-spacing: .06em !important; text-transform: uppercase !important; }
+[data-testid="stDataFrame"] tbody tr:hover td { background: #1c1c1e !important; }
 
-  /* dataframe */
-  .stDataFrame { border-radius: 10px; overflow: hidden; }
+/* ── tabs ── */
+.stTabs [data-baseweb="tab-list"]  { background: #111113; border-radius: 12px; padding: 4px; gap: 2px; }
+.stTabs [data-baseweb="tab"]       { border-radius: 8px; color: #71717a !important; font-size: 13px; font-weight: 500; }
+.stTabs [aria-selected="true"]     { background: #1c1c1e !important; color: #fafafa !important; }
+.stTabs [data-baseweb="tab-panel"] { padding-top: 0 !important; }
 
-  /* botão */
-  .stButton > button {
-    background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-    border-radius: 8px; width: 100%; font-size: 13px;
-  }
-  .stButton > button:hover { border-color: #f97316; color: #f97316; }
+/* ── sidebar ── */
+.stRadio [data-testid="stMarkdownContainer"] p { color: #a1a1aa; font-size: 13px; }
+div[data-testid="stRadio"] label { font-size: 13px !important; color: #d4d4d8 !important; }
+div[data-testid="stRadio"] label:hover { color: #fafafa !important; }
+
+/* ── button ── */
+.stButton > button {
+  background: #111113; color: #d4d4d8; border: 1px solid #27272a;
+  border-radius: 10px; width: 100%; font-size: 13px; padding: 8px 0;
+  transition: all .2s;
+}
+.stButton > button:hover { border-color: #f97316; color: #f97316; background: #18100a; }
+
+/* ── text input ── */
+.stTextInput > div > div { background: #111113 !important; border-color: #27272a !important; border-radius: 10px !important; }
+.stTextInput input { color: #fafafa !important; font-size: 13px !important; }
+
+/* ── scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #09090b; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── dados ─────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=60)
-def load_all_leads() -> pd.DataFrame:
-    df = pd.read_csv(SHEETS_CSV_URL)
-    df.columns = [c.strip().upper() for c in df.columns]
+# ── helpers ───────────────────────────────────────────────────────────────────
+def fmt_brl(v): return f"R$ {v:,.2f}".replace(",","X").replace(".",",").replace("X",".")
+def fmt_num(v): return f"{v:,}".replace(",",".")
 
-    if "DATA" in df.columns:
-        data_str = df["DATA"].astype(str).str.extract(
-            r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"
-        )[0]
-        df["DATA"] = pd.to_datetime(data_str, errors="coerce")
-        if hasattr(df["DATA"].dtype, "tz") and df["DATA"].dt.tz is not None:
-            df["DATA"] = df["DATA"].dt.tz_localize(None)
-
-    if "TELEFONE" in df.columns:
-        tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
-        df["DDD"] = tel.apply(
-            lambda t: t[2:4] if isinstance(t, str) and t.startswith("55") and len(t) >= 4 else None
-        )
-    return df
-
-
-@st.cache_data(ttl=300)
-def get_meta_spend(since: str, until: str) -> float | None:
-    if not META_TOKEN or not META_ACCOUNT:
-        return None
-    url = f"https://graph.facebook.com/v19.0/act_{META_ACCOUNT}/insights"
-    params = {
-        "fields": "spend",
-        "time_range": json.dumps({"since": since, "until": until}),
-        "access_token": META_TOKEN,
-        "level": "account",
-    }
-    try:
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        if "data" in data and data["data"]:
-            return float(data["data"][0].get("spend", 0))
-    except Exception:
-        pass
-    return None
-
-
-def fmt_brl(v: float) -> str:
-    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def fmt_num(v: int) -> str:
-    return f"{v:,}".replace(",", ".")
-
-def kpi_card(icon: str, label: str, value: str, sub: str = "") -> str:
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
-    return f"""
-    <div class="kpi-card">
-      <div class="kpi-icon">{icon}</div>
-      <div class="kpi-label">{label}</div>
+def kpi(dot_color, label, value, sub="", sub_gray=False):
+    sub_cls  = "kpi-sub-gray" if sub_gray else "kpi-sub"
+    sub_html = f'<div class="{sub_cls}">{sub}</div>' if sub else '<div style="height:14px"></div>'
+    dot_style = f'background:{dot_color}' if dot_color != "#f97316" else ""
+    dot_html  = f'<div class="kpi-dot" style="{dot_style}"></div>' if dot_style else '<div class="kpi-dot"></div>'
+    return f"""<div class="kpi">
+      <div class="kpi-top">{dot_html}<span class="kpi-label">{label}</span></div>
       <div class="kpi-value">{value}</div>
       {sub_html}
     </div>"""
 
+def sec(title):
+    st.markdown(f'<div class="sec"><div class="sec-line"></div>'
+                f'<span class="sec-text">{title}</span></div>', unsafe_allow_html=True)
 
-# ── gráficos ──────────────────────────────────────────────────────────────────
-def build_map_sp(df: pd.DataFrame) -> go.Figure:
-    if "DDD" not in df.columns or df.empty:
-        return go.Figure()
 
+# ── dados ─────────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=60)
+def load_all_leads():
+    df = pd.read_csv(SHEETS_CSV_URL)
+    df.columns = [c.strip().upper() for c in df.columns]
+    if "DATA" in df.columns:
+        s = df["DATA"].astype(str).str.extract(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})")[0]
+        df["DATA"] = pd.to_datetime(s, errors="coerce")
+        if getattr(df["DATA"].dtype, "tz", None):
+            df["DATA"] = df["DATA"].dt.tz_localize(None)
+    if "TELEFONE" in df.columns:
+        tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$","",regex=True).str.strip()
+        df["DDD"] = tel.apply(lambda t: t[2:4] if isinstance(t,str) and t.startswith("55") and len(t)>=4 else None)
+    return df
+
+@st.cache_data(ttl=300)
+def get_meta_spend(since, until):
+    if not META_TOKEN or not META_ACCOUNT: return None
+    try:
+        r = requests.get(
+            f"https://graph.facebook.com/v19.0/act_{META_ACCOUNT}/insights",
+            params={"fields":"spend","time_range":json.dumps({"since":since,"until":until}),
+                    "access_token":META_TOKEN,"level":"account"}, timeout=10)
+        d = r.json()
+        if "data" in d and d["data"]: return float(d["data"][0].get("spend",0))
+    except Exception: pass
+    return None
+
+
+# ── charts ────────────────────────────────────────────────────────────────────
+CHART_BG    = "#0d0d0f"
+GRID_COLOR  = "#1c1c1e"
+FONT_COLOR  = "#a1a1aa"
+
+def build_map(df):
+    if "DDD" not in df.columns or df.empty: return go.Figure()
     df_sp = df[df["DDD"].isin(SP_DDDS)]
-    if df_sp.empty:
-        return go.Figure()
-
+    if df_sp.empty: return go.Figure()
     counts = df_sp["DDD"].astype(str).value_counts().reset_index()
-    counts.columns = ["DDD", "leads"]
-
+    counts.columns = ["DDD","leads"]
     rows = []
-    for _, row in counts.iterrows():
-        info = DDD_INFO.get(row["DDD"])
+    for _, r in counts.iterrows():
+        info = DDD_INFO.get(r["DDD"])
         if info:
-            rows.append({
-                "DDD": row["DDD"],
-                "leads": int(row["leads"]),
-                "lat": info["lat"],
-                "lon": info["lon"],
-                "cidade": info["cidade"],
-            })
-
-    if not rows:
-        return go.Figure()
-
-    map_df = pd.DataFrame(rows)
-    max_leads = map_df["leads"].max()
+            rows.append({"DDD":r["DDD"],"leads":int(r["leads"]),
+                         "lat":info["lat"],"lon":info["lon"],"cidade":info["cidade"]})
+    if not rows: return go.Figure()
+    mdf = pd.DataFrame(rows)
+    mx  = mdf["leads"].max()
 
     fig = go.Figure()
-
-    # bolhas
     fig.add_trace(go.Scattermapbox(
-        lat=map_df["lat"],
-        lon=map_df["lon"],
-        mode="markers",
-        marker=dict(
-            size=map_df["leads"] / max_leads * 55 + 18,
-            color=map_df["leads"],
-            colorscale=[[0, "#7c3aed"], [0.5, "#f97316"], [1, "#ef4444"]],
-            opacity=0.85,
-            showscale=False,
-        ),
-        text=map_df.apply(
-            lambda r: f"<b>DDD {r['DDD']} — {r['cidade']}</b><br>{r['leads']:,} leads", axis=1
-        ),
-        hoverinfo="text",
-        name="",
+        lat=mdf["lat"], lon=mdf["lon"], mode="markers",
+        marker=dict(size=mdf["leads"]/mx*60+16, color=mdf["leads"],
+                    colorscale=[[0,"#6366f1"],[.5,"#f97316"],[1,"#ef4444"]],
+                    opacity=.82, showscale=False),
+        text=mdf.apply(lambda r: f"<b>DDD {r['DDD']} — {r['cidade']}</b><br>{r['leads']:,} leads",axis=1),
+        hoverinfo="text", name="",
     ))
-
-    # labels DDD
     fig.add_trace(go.Scattermapbox(
-        lat=map_df["lat"],
-        lon=map_df["lon"],
-        mode="text",
-        text=map_df["DDD"],
-        textfont=dict(size=11, color="#ffffff"),
-        hoverinfo="skip",
-        name="",
+        lat=mdf["lat"], lon=mdf["lon"], mode="text",
+        text=mdf["DDD"], textfont=dict(size=10,color="#ffffff",family="Inter"),
+        hoverinfo="skip", name="",
     ))
-
     fig.update_layout(
-        mapbox=dict(
-            style="carto-positron",
-            center={"lat": -22.2, "lon": -48.8},
-            zoom=5.8,
-        ),
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        paper_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,
-        height=420,
+        mapbox=dict(style="carto-positron", center={"lat":-22.2,"lon":-48.8}, zoom=5.8),
+        margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor=CHART_BG,
+        showlegend=False, height=400,
     )
     return fig
 
 
-def build_bar_ddd(df: pd.DataFrame, top_n: int = 15) -> go.Figure:
-    if "DDD" not in df.columns or df.empty:
-        return go.Figure()
-
-    counts = (
-        df["DDD"].dropna().astype(str).str.zfill(2)
-        .value_counts().head(top_n).reset_index()
-    )
-    counts.columns = ["DDD", "leads"]
-    counts["label"] = counts["DDD"].map(
-        lambda d: f"DDD {d} · {DDD_INFO[d]['cidade']}" if d in DDD_INFO else f"DDD {d}"
-    )
-    counts = counts.sort_values("leads", ascending=True)
-
+def build_bar(df, top_n=15):
+    if "DDD" not in df.columns or df.empty: return go.Figure()
+    counts = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().head(top_n).reset_index()
+    counts.columns = ["DDD","leads"]
+    counts["label"] = counts["DDD"].map(lambda d: f"DDD {d} · {DDD_INFO[d]['cidade']}" if d in DDD_INFO else f"DDD {d}")
+    counts = counts.sort_values("leads")
     fig = go.Figure(go.Bar(
-        x=counts["leads"],
-        y=counts["label"],
-        orientation="h",
-        marker=dict(
-            color=counts["leads"],
-            colorscale=[[0, "#7c3aed"], [1, "#f97316"]],
-            showscale=False,
-        ),
-        text=counts["leads"].apply(lambda v: f"{v:,}".replace(",", ".")),
-        textposition="outside",
-        textfont=dict(color="#8b949e", size=11),
+        x=counts["leads"], y=counts["label"], orientation="h",
+        marker=dict(color=counts["leads"], colorscale=[[0,"#6366f1"],[1,"#f97316"]], showscale=False,
+                    line=dict(width=0)),
+        text=counts["leads"].apply(lambda v: fmt_num(int(v))),
+        textposition="outside", textfont=dict(color="#52525b",size=10),
     ))
     fig.update_layout(
-        margin={"r": 40, "t": 10, "l": 10, "b": 10},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#c9d1d9",
-        height=420,
-        yaxis=dict(tickfont=dict(size=11), gridcolor="#21262d"),
-        xaxis=dict(gridcolor="#21262d", zeroline=False),
+        margin=dict(r=50,t=0,l=0,b=0), paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+        font_color=FONT_COLOR, font_size=11, height=400,
+        xaxis=dict(gridcolor=GRID_COLOR,zeroline=False,showline=False,tickfont_size=10),
+        yaxis=dict(gridcolor="rgba(0,0,0,0)",showline=False,tickfont_size=11),
     )
     return fig
 
 
-def build_line_daily(df: pd.DataFrame) -> go.Figure:
-    if "DATA" not in df.columns or df.empty:
-        return go.Figure()
-
+def build_area(df):
+    if "DATA" not in df.columns or df.empty: return go.Figure()
     daily = df.dropna(subset=["DATA"]).copy()
     daily["dia"] = daily["DATA"].dt.date
     daily = daily.groupby("dia").size().reset_index(name="leads")
-
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=daily["dia"],
-        y=daily["leads"],
-        mode="lines",
-        fill="tozeroy",
-        line=dict(color="#f97316", width=2),
-        fillcolor="rgba(249,115,22,0.12)",
-        hovertemplate="%{x}<br><b>%{y} leads</b><extra></extra>",
+        x=daily["dia"], y=daily["leads"], mode="lines", fill="tozeroy",
+        line=dict(color="#f97316",width=2.5),
+        fillcolor="rgba(249,115,22,0.08)",
+        hovertemplate="<b>%{y} leads</b><br>%{x}<extra></extra>",
     ))
     fig.update_layout(
-        margin={"r": 10, "t": 10, "l": 10, "b": 10},
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#c9d1d9",
-        height=220,
-        xaxis=dict(gridcolor="#21262d", showline=False, tickformat="%d/%m"),
-        yaxis=dict(gridcolor="#21262d", showline=False),
-        hovermode="x unified",
+        margin=dict(r=10,t=10,l=0,b=0), paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+        font_color=FONT_COLOR, height=200, hovermode="x unified",
+        xaxis=dict(gridcolor=GRID_COLOR,showline=False,tickformat="%d/%m",tickfont_size=11),
+        yaxis=dict(gridcolor=GRID_COLOR,showline=False,tickfont_size=11),
     )
     return fig
 
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(
-        '<h2 style="color:#f0f6fc;margin:0 0 4px 0;">📊 DashGuti</h2>'
-        '<p style="color:#8b949e;font-size:12px;margin:0 0 20px 0;">Trampah · Leads</p>',
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
+    st.markdown("""
+    <div style="padding:8px 0 20px 0">
+      <div style="font-size:18px;font-weight:700;color:#fafafa;letter-spacing:-.02em">DashGuti</div>
+      <div style="font-size:12px;color:#52525b;margin-top:2px">Trampah · Analytics</div>
+    </div>""", unsafe_allow_html=True)
 
-    hoje = date.today()
-    periodo = st.radio(
-        "Período",
-        ["Hoje", "7 dias", "30 dias", "Total", "Personalizado"],
-        index=2,
-    )
+    st.markdown('<div style="height:1px;background:#1c1c1e;margin-bottom:20px"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="color:#71717a;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Período</div>', unsafe_allow_html=True)
 
-    if periodo == "Hoje":
-        data_ini, data_fim = hoje, hoje
-    elif periodo == "7 dias":
-        data_ini, data_fim = hoje - timedelta(days=7), hoje
-    elif periodo == "30 dias":
-        data_ini, data_fim = hoje - timedelta(days=30), hoje
-    elif periodo == "Total":
-        data_ini, data_fim = date(2020, 1, 1), hoje
+    hoje   = date.today()
+    periodo = st.radio("", ["Hoje","7 dias","30 dias","Total","Personalizado"],
+                       index=2, label_visibility="collapsed")
+
+    if periodo == "Hoje":            data_ini, data_fim = hoje, hoje
+    elif periodo == "7 dias":        data_ini, data_fim = hoje-timedelta(7), hoje
+    elif periodo == "30 dias":       data_ini, data_fim = hoje-timedelta(30), hoje
+    elif periodo == "Total":         data_ini, data_fim = date(2020,1,1), hoje
     else:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            data_ini = st.date_input("De", value=hoje - timedelta(days=30))
-        with col_b:
-            data_fim = st.date_input("Até", value=hoje)
+        ca, cb = st.columns(2)
+        data_ini = ca.date_input("De",  value=hoje-timedelta(30), label_visibility="collapsed")
+        data_fim = cb.date_input("Até", value=hoje,               label_visibility="collapsed")
 
-    st.markdown("---")
-    if st.button("🔄 Atualizar dados"):
-        st.cache_data.clear()
-        st.rerun()
-    st.caption(f"Auto-refresh a cada 60s")
+    st.markdown('<div style="height:1px;background:#1c1c1e;margin:20px 0"></div>', unsafe_allow_html=True)
+    if st.button("⟳  Atualizar dados"):
+        st.cache_data.clear(); st.rerun()
+    st.markdown(f'<div style="color:#3f3f46;font-size:11px;margin-top:8px;text-align:center">auto-refresh · 60s</div>', unsafe_allow_html=True)
 
 
-# ── carrega e filtra ──────────────────────────────────────────────────────────
+# ── load & filter ─────────────────────────────────────────────────────────────
 since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
 
 with st.spinner(""):
-    try:
-        df_all = load_all_leads()
-        erro = None
-    except Exception as e:
-        df_all = pd.DataFrame()
-        erro = str(e)
+    try:    df_all = load_all_leads(); erro = None
+    except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:
-    st.error(f"Erro ao carregar planilha: {erro}")
-    st.stop()
+    st.error(f"Erro ao carregar planilha: {erro}"); st.stop()
 
 if "DATA" in df_all.columns and not df_all.empty:
-    mask = (df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)
-    df = df_all[mask].copy()
+    df = df_all[(df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)].copy()
 else:
     df = df_all.copy()
 
 
 # ── tabs ──────────────────────────────────────────────────────────────────────
-tab_geral, tab_leads = st.tabs(["🗺️  Geral", "📋  Leads"])
+tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# TAB GERAL
-# ──────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 with tab_geral:
+    total   = len(df)
+    leads_sp= int(df["DDD"].isin(SP_DDDS).sum()) if "DDD" in df.columns else 0
+    gasto   = get_meta_spend(since_str, until_str)
+    cpl     = (gasto/total) if gasto and total else None
+    pct_sp  = f"{leads_sp/total*100:.0f}% do total" if total else ""
 
-    total_leads = len(df)
-    leads_sp    = int(df["DDD"].isin(SP_DDDS).sum()) if "DDD" in df.columns else 0
-    valor_gasto = get_meta_spend(since_str, until_str)
-    cpl = (valor_gasto / total_leads) if (valor_gasto and total_leads > 0) else None
-
-    # KPIs
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(kpi_card("🎯", "Total de Leads", fmt_num(total_leads)), unsafe_allow_html=True)
-    with c2:
-        v = fmt_brl(valor_gasto) if valor_gasto is not None else "—"
-        sub = "" if valor_gasto else "Configure o token Meta"
-        st.markdown(kpi_card("💰", "Valor Gasto", v, sub), unsafe_allow_html=True)
-    with c3:
-        v = fmt_brl(cpl) if cpl is not None else "—"
-        st.markdown(kpi_card("📉", "Custo por Lead (CPL)", v), unsafe_allow_html=True)
-    with c4:
-        pct = f"{leads_sp/total_leads*100:.0f}% do total" if total_leads else ""
-        st.markdown(kpi_card("📍", "Leads em SP", fmt_num(leads_sp), pct), unsafe_allow_html=True)
+    # ── KPIs ──────────────────────────────────────────────────────────────────
+    k1,k2,k3,k4 = st.columns(4, gap="small")
+    k1.markdown(kpi("#6366f1","Total de Leads",   fmt_num(total)), unsafe_allow_html=True)
+    k2.markdown(kpi("#10b981","Valor Gasto",      fmt_brl(gasto) if gasto else "—",
+                    sub="" if gasto else "Configure o token Meta", sub_gray=not gasto), unsafe_allow_html=True)
+    k3.markdown(kpi("#f59e0b","Custo por Lead",   fmt_brl(cpl) if cpl else "—"), unsafe_allow_html=True)
+    k4.markdown(kpi("#f97316","Leads em SP",      fmt_num(leads_sp), pct_sp), unsafe_allow_html=True)
 
     if df.empty:
-        st.info("Nenhum lead encontrado no período selecionado.")
-        st.stop()
+        st.info("Nenhum lead no período."); st.stop()
 
-    # Mapa + Barra
-    st.markdown('<div class="section-title">Distribuição Geográfica</div>', unsafe_allow_html=True)
-    col_map, col_bar = st.columns([3, 2], gap="medium")
+    # ── Mapa + Barra ───────────────────────────────────────────────────────────
+    sec("Distribuição Geográfica")
+    cm, cb_ = st.columns([3,2], gap="medium")
+    with cm:
+        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Estado de São Paulo · por DDD</p>', unsafe_allow_html=True)
+        st.plotly_chart(build_map(df), use_container_width=True, config={"displayModeBar":False})
+    with cb_:
+        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Top DDDs · todos os estados</p>', unsafe_allow_html=True)
+        st.plotly_chart(build_bar(df), use_container_width=True, config={"displayModeBar":False})
 
-    with col_map:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown("**Mapa — Estado de São Paulo por DDD**")
-        st.plotly_chart(build_map_sp(df), use_container_width=True, config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
+    # ── Evolução ──────────────────────────────────────────────────────────────
+    sec("Evolução Diária de Leads")
+    st.plotly_chart(build_area(df), use_container_width=True, config={"displayModeBar":False})
 
-    with col_bar:
-        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-        st.markdown("**Top DDDs**")
-        st.plotly_chart(build_bar_ddd(df), use_container_width=True, config={"displayModeBar": False})
-        st.markdown('</div>', unsafe_allow_html=True)
+    # ── Tabelas ───────────────────────────────────────────────────────────────
+    sec("Métricas Detalhadas")
+    td, tf = st.columns(2, gap="medium")
 
-    # Linha diária
-    st.markdown('<div class="section-title">Evolução Diária</div>', unsafe_allow_html=True)
-    st.markdown('<div class="chart-card">', unsafe_allow_html=True)
-    st.plotly_chart(build_line_daily(df), use_container_width=True, config={"displayModeBar": False})
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Tabelas lado a lado
-    st.markdown('<div class="section-title">Métricas Detalhadas</div>', unsafe_allow_html=True)
-    t1, t2 = st.columns(2, gap="medium")
-
-    with t1:
-        st.markdown("**Por DDD**")
+    with td:
+        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Por DDD</p>', unsafe_allow_html=True)
         if "DDD" in df.columns:
-            resumo_ddd = (
-                df["DDD"].dropna().astype(str).str.zfill(2)
-                .value_counts().reset_index()
-                .rename(columns={"DDD": "DDD", "count": "Leads"})
-            )
-            resumo_ddd["Cidade"] = resumo_ddd["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("cidade", "—"))
-            resumo_ddd["Estado"] = resumo_ddd["DDD"].map(lambda d: DDD_INFO.get(d, {}).get("estado", "—"))
-            resumo_ddd["% Total"] = (resumo_ddd["Leads"] / total_leads * 100).round(1).astype(str) + "%"
-            st.dataframe(
-                resumo_ddd[["DDD", "Cidade", "Estado", "Leads", "% Total"]],
-                use_container_width=True, hide_index=True, height=350,
-            )
+            r = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().reset_index()
+            r.columns = ["DDD","Leads"]
+            r["Cidade"] = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("cidade","—"))
+            r["Estado"] = r["DDD"].map(lambda d: DDD_INFO.get(d,{}).get("estado","—"))
+            r["% Total"] = (r["Leads"]/total*100).round(1).astype(str)+"%"
+            st.dataframe(r[["DDD","Cidade","Estado","Leads","% Total"]],
+                         use_container_width=True, hide_index=True, height=320)
 
-    with t2:
-        st.markdown("**Por Origem (Fonte)**")
+    with tf:
+        st.markdown('<p style="color:#71717a;font-size:12px;margin:0 0 8px 4px">Por Fonte</p>', unsafe_allow_html=True)
         if "FONTE" in df.columns:
-            resumo_fonte = (
-                df["FONTE"].fillna("Não informado")
-                .value_counts().reset_index()
-                .rename(columns={"FONTE": "Fonte", "count": "Leads"})
-            )
-            resumo_fonte["% Total"] = (resumo_fonte["Leads"] / total_leads * 100).round(1).astype(str) + "%"
-            if cpl is not None:
-                resumo_fonte["CPL Est."] = resumo_fonte["Leads"].apply(
-                    lambda l: fmt_brl(valor_gasto * l / total_leads / l) if l > 0 else "—"
-                )
-                cols_fonte = ["Fonte", "Leads", "% Total", "CPL Est."]
-            else:
-                cols_fonte = ["Fonte", "Leads", "% Total"]
-            st.dataframe(
-                resumo_fonte[cols_fonte],
-                use_container_width=True, hide_index=True, height=350,
-            )
+            rf = df["FONTE"].fillna("Não informado").value_counts().reset_index()
+            rf.columns = ["Fonte","Leads"]
+            rf["% Total"] = (rf["Leads"]/total*100).round(1).astype(str)+"%"
+            if cpl:
+                rf["CPL Est."] = fmt_brl(cpl)
+            st.dataframe(rf[["Fonte","Leads","% Total"] + (["CPL Est."] if cpl else [])],
+                         use_container_width=True, hide_index=True, height=320)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# TAB LEADS
-# ──────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 with tab_leads:
-    st.markdown(
-        f'<p style="color:#8b949e;font-size:13px;margin-bottom:16px;">'
-        f'{fmt_num(len(df))} leads encontrados no período</p>',
-        unsafe_allow_html=True,
-    )
-
     if df.empty:
         st.info("Nenhum lead no período.")
     else:
-        search = st.text_input("🔍  Buscar por nome ou e-mail", placeholder="Digite para filtrar...", label_visibility="collapsed")
+        c_search, c_count = st.columns([3,1])
+        with c_search:
+            search = st.text_input("", placeholder="🔍  Buscar por nome ou e-mail...",
+                                   label_visibility="collapsed")
+        with c_count:
+            st.markdown(f'<div style="color:#52525b;font-size:12px;padding:10px 0;text-align:right">'
+                        f'{fmt_num(len(df))} leads</div>', unsafe_allow_html=True)
+
         df_show = df.copy()
         if search:
-            mask = (
-                df_show.get("NOME",  pd.Series(dtype=str)).str.contains(search, case=False, na=False)
-                | df_show.get("EMAIL", pd.Series(dtype=str)).str.contains(search, case=False, na=False)
-            )
-            df_show = df_show[mask]
+            m = (df_show.get("NOME",  pd.Series(dtype=str)).str.contains(search,case=False,na=False)
+               | df_show.get("EMAIL", pd.Series(dtype=str)).str.contains(search,case=False,na=False))
+            df_show = df_show[m]
 
-        cols_show = [c for c in ["DATA", "NOME", "EMAIL", "TELEFONE", "DDD", "FONTE"] if c in df_show.columns]
-        st.dataframe(df_show[cols_show], use_container_width=True, hide_index=True, height=500)
+        cols = [c for c in ["DATA","NOME","EMAIL","TELEFONE","DDD","FONTE"] if c in df_show.columns]
+        st.dataframe(df_show[cols], use_container_width=True, hide_index=True, height=520)

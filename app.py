@@ -573,7 +573,8 @@ else:
 # ═══════════════════════════════ REINOH ══════════════════════════════════════
 if tipo == "reinoh":
     total_r  = len(df)
-    # coluna de município pode vir como MUNICIPIO ou MUNICIPIO (após normalização)
+    with st.expander("🔍 Debug: colunas recebidas do Supabase", expanded=False):
+        st.code(repr(df.columns.tolist()))
     MUN_COL = next((c for c in df.columns if "MUNICIPIO" in c or "MUNIC" in c), None)
     IND_COL = next((c for c in df.columns if "INDICADO" in c), None)
     IGR_COL = next((c for c in df.columns if "IGREJA" in c), None)

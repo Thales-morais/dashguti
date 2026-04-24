@@ -1,4 +1,4 @@
-import os, json, re, requests
+import os, json, re, requests, unicodedata
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -292,7 +292,10 @@ def load_reinoh() -> pd.DataFrame:
         offset += page
     if not rows: return pd.DataFrame()
     df = pd.DataFrame(rows)
-    df.columns = [c.strip().upper() for c in df.columns]
+    def _norm_col(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii", "ignore").decode("ascii")
+        return re.sub(r"\s+", "_", c.strip()).upper()
+    df.columns = [_norm_col(c) for c in df.columns]
     # detecta coluna de data (pode ter nomes diferentes dependendo de como foi criada no Supabase)
     date_col = next((c for c in df.columns if "DATA" in c or "DATE" in c or "CADASTRO" in c), None)
     if date_col:
@@ -408,6 +411,68 @@ def bar_fonte(df):
     return fig
 
 
+CIDADE_COORDS = {
+    "GUARULHOS":{"lat":-23.4543,"lon":-46.5333},"CAMPINAS":{"lat":-22.9056,"lon":-47.0608},
+    "HORTOLANDIA":{"lat":-22.8608,"lon":-47.2200},"HORTOLÂNDIA":{"lat":-22.8608,"lon":-47.2200},
+    "SUMARE":{"lat":-22.8219,"lon":-47.2669},"SUMARÉ":{"lat":-22.8219,"lon":-47.2669},
+    "PAULINIA":{"lat":-22.7614,"lon":-47.1536},"PAULÍNIA":{"lat":-22.7614,"lon":-47.1536},
+    "ATIBAIA":{"lat":-23.1175,"lon":-46.5503},
+    "PRAIA GRANDE":{"lat":-24.0058,"lon":-46.4022},
+    "SAO PAULO":{"lat":-23.5505,"lon":-46.6333},"SÃO PAULO":{"lat":-23.5505,"lon":-46.6333},
+    "SANTO ANDRE":{"lat":-23.6639,"lon":-46.5383},"SANTO ANDRÉ":{"lat":-23.6639,"lon":-46.5383},
+    "MOGI DAS CRUZES":{"lat":-23.5228,"lon":-46.1869},
+    "JUNDIAI":{"lat":-23.1864,"lon":-46.8981},"JUNDIAÍ":{"lat":-23.1864,"lon":-46.8981},
+    "SOROCABA":{"lat":-23.5015,"lon":-47.4526},
+    "BARUERI":{"lat":-23.5114,"lon":-46.8758},
+    "OSASCO":{"lat":-23.5325,"lon":-46.7919},
+    "SAO BERNARDO DO CAMPO":{"lat":-23.6914,"lon":-46.5646},
+    "RIBEIRAO PRETO":{"lat":-21.1775,"lon":-47.8103},"RIBEIRÃO PRETO":{"lat":-21.1775,"lon":-47.8103},
+    "SAO JOSE DOS CAMPOS":{"lat":-23.1794,"lon":-45.8869},"SÃO JOSÉ DOS CAMPOS":{"lat":-23.1794,"lon":-45.8869},
+    "SANTOS":{"lat":-23.9608,"lon":-46.3336},
+    "PIRACICABA":{"lat":-22.7253,"lon":-47.6492},
+    "LIMEIRA":{"lat":-22.5647,"lon":-47.4008},
+    "AMERICANA":{"lat":-22.7394,"lon":-47.3319},
+    "SANTA BARBARA D'OESTE":{"lat":-22.7539,"lon":-47.4136},
+    "INDAIATUBA":{"lat":-23.0897,"lon":-47.2189},
+    "VALINHOS":{"lat":-22.9706,"lon":-46.9961},
+    "VINHEDO":{"lat":-23.0297,"lon":-46.9747},"VINHEDO":{"lat":-23.0297,"lon":-46.9747},
+    "ITATIBA":{"lat":-23.0039,"lon":-46.8381},
+}
+
+def municipio_key(nome):
+    n = unicodedata.normalize("NFKD", str(nome)).encode("ascii","ignore").decode("ascii").upper().strip()
+    return CIDADE_COORDS.get(n)
+
+def map_municipio(df):
+    if "MUNICIPIO" not in df.columns or df.empty: return None
+    cnt = df["MUNICIPIO"].value_counts().reset_index()
+    cnt.columns = ["MUNICIPIO","cadastros"]
+    rows = []
+    for _, r in cnt.iterrows():
+        coords = municipio_key(r.MUNICIPIO)
+        if coords:
+            rows.append({"cidade": r.MUNICIPIO, "cadastros": int(r.cadastros),
+                         "lat": coords["lat"], "lon": coords["lon"]})
+    if not rows: return None
+    mdf = pd.DataFrame(rows); mx = mdf["cadastros"].max()
+    fig = go.Figure()
+    fig.add_trace(go.Scattermapbox(
+        lat=mdf["lat"], lon=mdf["lon"], mode="markers",
+        marker=dict(size=mdf["cadastros"]/mx*60+14,
+                    color=mdf["cadastros"],
+                    colorscale=[[0,GREEN],[.5,ORANGE],[1,"#ef4444"]],
+                    opacity=.85, showscale=False, sizemode="diameter"),
+        customdata=mdf[["cidade","cadastros"]].values,
+        hovertemplate="<b>%{customdata[0]}</b><br><b>%{customdata[1]:,} cadastros</b><extra></extra>",
+        text=mdf["cidade"], name="",
+    ))
+    fig.update_layout(
+        mapbox=dict(style="carto-positron", center={"lat":-23.0,"lon":-47.0}, zoom=7),
+        margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=False, height=380,
+    )
+    return fig
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 
 # Páginas disponíveis — adicione novas entradas aqui conforme criar tabelas no Supabase
@@ -508,9 +573,19 @@ else:
 # ═══════════════════════════════ REINOH ══════════════════════════════════════
 if tipo == "reinoh":
     total_r  = len(df)
-    n_mun    = df["MUNICIPIO"].nunique()  if "MUNICIPIO"    in df.columns else 0
-    n_igr    = df["IGREJA"].nunique()     if "IGREJA"       in df.columns else 0
-    n_ind    = df["INDICADO_POR"].nunique() if "INDICADO_POR" in df.columns else 0
+    # coluna de município pode vir como MUNICIPIO ou MUNICIPIO (após normalização)
+    MUN_COL = next((c for c in df.columns if "MUNICIPIO" in c or "MUNIC" in c), None)
+    IND_COL = next((c for c in df.columns if "INDICADO" in c), None)
+    IGR_COL = next((c for c in df.columns if "IGREJA" in c), None)
+    STS_COL = next((c for c in df.columns if "STATUS" in c), None)
+    # normaliza nomes para facilitar acesso
+    if MUN_COL and MUN_COL != "MUNICIPIO": df = df.rename(columns={MUN_COL: "MUNICIPIO"})
+    if IND_COL and IND_COL != "INDICADO_POR": df = df.rename(columns={IND_COL: "INDICADO_POR"})
+    if IGR_COL and IGR_COL != "IGREJA": df = df.rename(columns={IGR_COL: "IGREJA"})
+    if STS_COL and STS_COL != "STATUS": df = df.rename(columns={STS_COL: "STATUS"})
+    n_mun = df["MUNICIPIO"].nunique()    if "MUNICIPIO"    in df.columns else 0
+    n_igr = df["IGREJA"].nunique()       if "IGREJA"       in df.columns else 0
+    n_ind = df["INDICADO_POR"].nunique() if "INDICADO_POR" in df.columns else 0
 
     with tab_vis:
         # KPIs
@@ -533,24 +608,20 @@ if tipo == "reinoh":
 
         # Crescimento diário
         section("Crescimento")
-        with st.container(border=True):
-            st.markdown('<div class="chart-title">Cadastros por dia</div>'
-                        '<div class="chart-sub">Evolução no período selecionado</div>',
-                        unsafe_allow_html=True)
-            st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
-
-        # Rede de indicação + Municípios
-        section("Rede de Indicação & Distribuição")
-        c1, c2 = st.columns(2, gap="medium")
-
-        with c1:
+        cc1, cc2 = st.columns([3,2], gap="medium")
+        with cc1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Cadastros por dia</div>'
+                            '<div class="chart-sub">Evolução no período selecionado</div>',
+                            unsafe_allow_html=True)
+                st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
+        with cc2:
             with st.container(border=True):
                 st.markdown('<div class="chart-title">Top Indicadores</div>'
                             '<div class="chart-sub">Quem mais está trazendo cadastros</div>',
                             unsafe_allow_html=True)
                 if "INDICADO_POR" in df.columns:
-                    ri = (df["INDICADO_POR"].fillna("Não informado")
-                          .value_counts().head(10).reset_index())
+                    ri = (df["INDICADO_POR"].fillna("Não informado").value_counts().head(8).reset_index())
                     ri.columns = ["Indicador","Qtd"]
                     ri = ri.sort_values("Qtd")
                     fig = go.Figure(go.Bar(
@@ -560,36 +631,37 @@ if tipo == "reinoh":
                         text=ri["Qtd"], textposition="outside",
                         textfont=dict(color=MUTED2, size=11),
                     ))
-                    fig.update_layout(**base_layout(height=320,
+                    fig.update_layout(**base_layout(height=240,
                         xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
                         yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
                         bargap=0.3,
                     ))
                     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
-        with c2:
+        # Mapa por município
+        section("Distribuição Geográfica")
+        mfig = map_municipio(df)
+        if mfig:
+            st.plotly_chart(mfig, use_container_width=True, config={"displayModeBar":False})
+        elif "MUNICIPIO" in df.columns:
+            # fallback: bar chart se cidades não estiverem no lookup
             with st.container(border=True):
-                st.markdown('<div class="chart-title">Por Município</div>'
-                            '<div class="chart-sub">Distribuição geográfica dos cadastros</div>',
-                            unsafe_allow_html=True)
-                if "MUNICIPIO" in df.columns:
-                    rm = (df["MUNICIPIO"].fillna("Não informado")
-                          .value_counts().head(10).reset_index())
-                    rm.columns = ["Município","Qtd"]
-                    rm = rm.sort_values("Qtd")
-                    fig = go.Figure(go.Bar(
-                        x=rm["Qtd"], y=rm["Município"], orientation="h",
-                        marker=dict(color=rm["Qtd"], colorscale=[[0,GREEN],[1,AMBER]],
-                                    showscale=False, line=dict(width=0)),
-                        text=rm["Qtd"], textposition="outside",
-                        textfont=dict(color=MUTED2, size=11),
-                    ))
-                    fig.update_layout(**base_layout(height=320,
-                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
-                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
-                        bargap=0.3,
-                    ))
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+                rm = df["MUNICIPIO"].fillna("Não informado").value_counts().head(15).reset_index()
+                rm.columns = ["Município","Qtd"]
+                rm = rm.sort_values("Qtd")
+                fig = go.Figure(go.Bar(
+                    x=rm["Qtd"], y=rm["Município"], orientation="h",
+                    marker=dict(color=rm["Qtd"], colorscale=[[0,GREEN],[1,AMBER]],
+                                showscale=False, line=dict(width=0)),
+                    text=rm["Qtd"], textposition="outside",
+                    textfont=dict(color=MUTED2, size=11),
+                ))
+                fig.update_layout(**base_layout(height=400,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False),
+                    bargap=0.3,
+                ))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
         # Tabelas detalhadas
         section("Métricas Detalhadas")

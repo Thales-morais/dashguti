@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from datetime import date
+from datetime import date, timedelta
 from dotenv import load_dotenv
 from ddd_coords import DDD_INFO
 
@@ -19,6 +19,8 @@ SHEETS_CSV_URL = (
 
 META_TOKEN   = os.getenv("META_ACCESS_TOKEN", "")
 META_ACCOUNT = os.getenv("META_AD_ACCOUNT_ID", "")
+
+SP_DDDS = {"11", "12", "13", "14", "15", "16", "17", "18", "19"}
 
 st.set_page_config(
     page_title="Dashboard Guti",
@@ -80,11 +82,16 @@ def fmt_brl(v: float) -> str:
 
 
 # ── gráficos ──────────────────────────────────────────────────────────────────
-def build_map(df: pd.DataFrame) -> go.Figure:
+def build_map_sp(df: pd.DataFrame) -> go.Figure:
+    """Mapa do estado de SP com bolhas por DDD."""
     if "DDD" not in df.columns or df.empty:
         return go.Figure()
 
-    counts = df["DDD"].dropna().astype(str).str.zfill(2).value_counts().reset_index()
+    df_sp = df[df["DDD"].isin(SP_DDDS)]
+    if df_sp.empty:
+        return go.Figure()
+
+    counts = df_sp["DDD"].astype(str).value_counts().reset_index()
     counts.columns = ["DDD", "leads"]
 
     rows = []
@@ -97,7 +104,6 @@ def build_map(df: pd.DataFrame) -> go.Figure:
                 "lat": info["lat"],
                 "lon": info["lon"],
                 "label": f"DDD {row['DDD']} — {info['cidade']}<br>{row['leads']:,} leads",
-                "estado": info["estado"],
             })
 
     if not rows:
@@ -109,12 +115,13 @@ def build_map(df: pd.DataFrame) -> go.Figure:
         lat="lat", lon="lon",
         size="leads", color="leads",
         hover_name="label",
-        hover_data={"lat": False, "lon": False, "leads": True, "estado": True},
+        hover_data={"lat": False, "lon": False, "leads": True},
         color_continuous_scale="Oranges",
-        size_max=60, zoom=3.5,
-        center={"lat": -15.0, "lon": -50.0},
+        size_max=70,
+        zoom=5.8,
+        center={"lat": -22.2, "lon": -48.8},
         mapbox_style="carto-darkmatter",
-        labels={"leads": "Leads", "estado": "Estado"},
+        labels={"leads": "Leads"},
     )
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
@@ -184,14 +191,32 @@ def build_line_daily(df: pd.DataFrame) -> go.Figure:
 with st.sidebar:
     st.markdown("## 📊 DashGuti")
     st.markdown("---")
-    st.markdown("### Filtros")
+    st.markdown("### Período")
 
     hoje = date.today()
-    col_a, col_b = st.columns(2)
-    with col_a:
-        data_ini = st.date_input("De", value=hoje.replace(day=1), key="d_ini")
-    with col_b:
-        data_fim = st.date_input("Até", value=hoje, key="d_fim")
+
+    periodo = st.radio(
+        "Selecione",
+        ["Hoje", "7 dias", "30 dias", "Total", "Personalizado"],
+        index=2,
+        label_visibility="collapsed",
+    )
+
+    if periodo == "Hoje":
+        data_ini, data_fim = hoje, hoje
+    elif periodo == "7 dias":
+        data_ini, data_fim = hoje - timedelta(days=7), hoje
+    elif periodo == "30 dias":
+        data_ini, data_fim = hoje - timedelta(days=30), hoje
+    elif periodo == "Total":
+        data_ini, data_fim = date(2020, 1, 1), hoje
+    else:
+        st.markdown("**De / Até**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            data_ini = st.date_input("De", value=hoje - timedelta(days=30), label_visibility="collapsed")
+        with col_b:
+            data_fim = st.date_input("Até", value=hoje, label_visibility="collapsed")
 
     st.markdown("---")
     st.caption("Dados atualizados a cada 60s")
@@ -200,11 +225,11 @@ with st.sidebar:
         st.rerun()
 
 
-# ── carrega e filtra ──────────────────────────────────────────────────────────
+# ── carrega dados ─────────────────────────────────────────────────────────────
 since_str = data_ini.strftime("%Y-%m-%d")
 until_str = data_fim.strftime("%Y-%m-%d")
 
-with st.spinner("Carregando dados do Google Sheets..."):
+with st.spinner("Carregando dados..."):
     try:
         df_all = load_all_leads()
         erro = None
@@ -218,11 +243,7 @@ if erro:
 
 # filtra por período
 if "DATA" in df_all.columns and not df_all.empty:
-    mask = (
-        df_all["DATA"].dt.date >= data_ini
-    ) & (
-        df_all["DATA"].dt.date <= data_fim
-    )
+    mask = (df_all["DATA"].dt.date >= data_ini) & (df_all["DATA"].dt.date <= data_fim)
     df = df_all[mask].copy()
 else:
     df = df_all.copy()
@@ -238,11 +259,11 @@ tab_geral, tab_leads = st.tabs(["🗺️  Geral", "📋  Leads"])
 with tab_geral:
     st.markdown("## Visão Geral — Trampah")
 
-    total_leads = len(df)
-    valor_gasto = get_meta_spend(since_str, until_str)
+    total_leads  = len(df)
+    leads_sp     = df["DDD"].isin(SP_DDDS).sum() if "DDD" in df.columns else 0
+    valor_gasto  = get_meta_spend(since_str, until_str)
     cpl = (valor_gasto / total_leads) if (valor_gasto and total_leads > 0) else None
 
-    # KPIs
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.metric("Total de Leads", f"{total_leads:,}".replace(",", "."))
@@ -251,15 +272,13 @@ with tab_geral:
             st.metric("Valor Gasto (Meta)", fmt_brl(valor_gasto))
         else:
             st.metric("Valor Gasto (Meta)", "—")
-            st.caption("Configure META_ACCESS_TOKEN no .env")
     with k3:
         if cpl is not None:
             st.metric("Custo por Lead (CPL)", fmt_brl(cpl))
         else:
             st.metric("Custo por Lead (CPL)", "—")
     with k4:
-        fontes = df["FONTE"].nunique() if "FONTE" in df.columns else 0
-        st.metric("Fontes ativas", str(fontes))
+        st.metric("Leads em SP", f"{leads_sp:,}".replace(",", "."))
 
     st.markdown("---")
 
@@ -267,20 +286,20 @@ with tab_geral:
         st.info("Nenhum lead encontrado no período selecionado.")
         st.stop()
 
-    # Mapa + Barra
+    # Mapa SP + Barra DDDs
     col_map, col_bar = st.columns([3, 2])
     with col_map:
-        st.markdown("#### Distribuição por DDD")
-        st.plotly_chart(build_map(df), use_container_width=True, config={"displayModeBar": False})
+        st.markdown("#### Mapa — Estado de São Paulo por DDD")
+        st.plotly_chart(build_map_sp(df), use_container_width=True, config={"displayModeBar": False})
     with col_bar:
-        st.markdown("#### Top DDDs")
+        st.markdown("#### Top DDDs (todos os estados)")
         st.plotly_chart(build_bar_ddd(df), use_container_width=True, config={"displayModeBar": False})
 
     # Linha diária
     st.markdown("#### Leads por dia")
     st.plotly_chart(build_line_daily(df), use_container_width=True, config={"displayModeBar": False})
 
-    # Tabela resumo DDD
+    # Tabela resumo
     if "DDD" in df.columns:
         st.markdown("#### Resumo por DDD")
         resumo = (

@@ -173,7 +173,11 @@ def load_leads():
             df["DATA"] = df["DATA"].dt.tz_localize(None)
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.replace(r"\.0$","",regex=True).str.strip()
-        df["DDD"] = tel.apply(lambda t: t[2:4] if isinstance(t,str) and t.startswith("55") and len(t)>=4 else None)
+        def _ddd(t):
+            if not t: return None
+            candidate = t[2:4] if t.startswith("55") else t[:2]
+            return candidate if candidate in DDD_INFO else None
+        df["DDD"] = tel.apply(_ddd)
     return df
 
 @st.cache_data(ttl=300)

@@ -133,15 +133,17 @@ div[data-testid="stSelectbox"] > div > div {{ background:{SURF} !important; bord
 section[data-testid="stSidebar"] .stButton>button {{
   background:{SURF} !important; color:{MUTED} !important;
   border:1px solid {BORDER} !important; border-radius:10px !important;
-  height:36px !important; min-height:unset !important;
-  font-size:17px !important; padding:0 !important;
+  height:34px !important; min-height:0 !important; max-height:34px !important;
+  font-size:17px !important; padding:0 4px !important; line-height:1 !important;
   display:flex !important; align-items:center !important; justify-content:center !important;
-  transition:border-color .2s,color .2s;
+  transition:border-color .2s,color .2s; box-shadow:none !important;
 }}
 section[data-testid="stSidebar"] .stButton>button:hover {{
   border-color:{ORANGE} !important; color:{ORANGE} !important;
 }}
-section[data-testid="stSidebar"] .stButton {{ margin-top:0 !important; margin-bottom:0 !important; }}
+section[data-testid="stSidebar"] .stButton       {{ margin:0 !important; padding:0 !important; }}
+section[data-testid="stSidebar"] [data-testid="column"] {{ padding:0 2px !important; }}
+section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {{ gap:4px !important; align-items:center !important; }}
 
 /* ── text input ── */
 .stTextInput>div>div {{ background:{SURF} !important; border:1px solid {BORDER} !important; border-radius:12px !important; box-shadow:{SHADOW}; }}
@@ -310,9 +312,9 @@ with st.sidebar:
         <div style="font-size:19px;font-weight:800;color:{TXT};letter-spacing:-.03em;line-height:1.1">DashGuti</div>
         <div style="font-size:11px;color:{MUTED2};margin-top:3px;font-weight:500">Trampah · Analytics</div>
         """, unsafe_allow_html=True)
-    if c_theme.button(BTN_ICON, use_container_width=True, help=BTN_LBL):
+    if c_theme.button(BTN_ICON, use_container_width=True):
         st.session_state.dark = not D; st.rerun()
-    if c_refresh.button("⟳", use_container_width=True, help="Atualizar dados"):
+    if c_refresh.button("⟳", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:20px 0 20px"></div>', unsafe_allow_html=True)

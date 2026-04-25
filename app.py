@@ -662,7 +662,7 @@ if tipo == "reinoh":
         section("Distribuição Geográfica")
         mfig = map_municipio(df)
         if mfig:
-            st.plotly_chart(mfig, use_container_width=True, config={"displayModeBar":False})
+            st.plotly_chart(mfig, use_container_width=True, config={"displayModeBar":False, "scrollZoom":True})
         elif "MUNICIPIO" in df.columns:
             # fallback: bar chart se cidades não estiverem no lookup
             with st.container(border=True):
@@ -771,7 +771,7 @@ with tab_geral:
     section("Distribuição Geográfica")
     st.markdown(f'<p style="color:{MUTED};font-size:13px;margin:-8px 0 16px">Estado de São Paulo · bolhas proporcionais ao volume de leads por DDD</p>',
                 unsafe_allow_html=True)
-    st.plotly_chart(map_chart(df), use_container_width=True, config={"displayModeBar":False})
+    st.plotly_chart(map_chart(df), use_container_width=True, config={"displayModeBar":False, "scrollZoom":True})
 
     # Evolução + Fonte
     section("Evolução & Origem")

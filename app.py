@@ -1,4 +1,5 @@
 import os, json, re, requests, unicodedata
+from urllib.parse import urlparse, parse_qs
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -312,6 +313,55 @@ def load_reinoh() -> pd.DataFrame:
         df["DDD"] = tel.apply(_ddd)
     return df
 
+@st.cache_data(ttl=20)
+def load_zona_eleitoral() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/Guti_zona_eleitoral?select=*&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    def _norm_col(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
+        return re.sub(r"\s+", "_", c.strip()).upper()
+    df.columns = [_norm_col(c) for c in df.columns]
+    # data
+    date_col = next((c for c in df.columns if "CRIADO" in c or "DATA" in c or "DATE" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
+    # padroniza colunas-chave
+    renames = {
+        next((c for c in df.columns if "NOME" in c and "DO" not in c), None): "NOME",
+        next((c for c in df.columns if "MAIL" in c), None):                    "EMAIL",
+        next((c for c in df.columns if "TELEFONE" in c or "FONE" in c), None): "TELEFONE",
+        next((c for c in df.columns if c == "CIDADE" or "CIDAD" in c), None):  "CIDADE",
+        next((c for c in df.columns if "FORM" in c or "NOME_DO" in c or "FONTE" in c), None): "FONTE",
+        next((c for c in df.columns if "REFER" in c or "UTM" in c), None):     "REF",
+    }
+    df = df.rename(columns={orig: std for orig, std in renames.items() if orig and orig != std})
+    # parse UTM da coluna Referência
+    if "REF" in df.columns:
+        def _parse_utm(url):
+            try:
+                q = parse_qs(urlparse(str(url)).query)
+                return pd.Series({
+                    "UTM_SOURCE":   q.get("utm_source",   [None])[0],
+                    "UTM_CAMPAIGN": q.get("utm_campaign", [None])[0],
+                    "UTM_MEDIUM":   q.get("utm_medium",   [None])[0],
+                })
+            except Exception:
+                return pd.Series({"UTM_SOURCE": None, "UTM_CAMPAIGN": None, "UTM_MEDIUM": None})
+        df[["UTM_SOURCE","UTM_CAMPAIGN","UTM_MEDIUM"]] = df["REF"].apply(_parse_utm)
+    return df
+
 @st.cache_data(ttl=86400)
 def _sp_geojson():
     try:
@@ -456,40 +506,63 @@ CIDADE_COORDS = {
     "VALINHOS":{"lat":-22.9706,"lon":-46.9961},
     "VINHEDO":{"lat":-23.0297,"lon":-46.9747},"VINHEDO":{"lat":-23.0297,"lon":-46.9747},
     "ITATIBA":{"lat":-23.0039,"lon":-46.8381},
+    "PERUIBE":{"lat":-24.3189,"lon":-47.0044},"PERUÍBE":{"lat":-24.3189,"lon":-47.0044},
+    "BARUERI":{"lat":-23.5114,"lon":-46.8758},
+    "ITAPEVI":{"lat":-23.5489,"lon":-46.9342},
+    "COTIA":{"lat":-23.6039,"lon":-46.9192},
+    "EMBU_DAS_ARTES":{"lat":-23.6489,"lon":-46.8511},"EMBU DAS ARTES":{"lat":-23.6489,"lon":-46.8511},
+    "DIADEMA":{"lat":-23.6861,"lon":-46.6228},
+    "MAUA":{"lat":-23.6678,"lon":-46.4619},"MAUÁ":{"lat":-23.6678,"lon":-46.4619},
+    "SUZANO":{"lat":-23.5422,"lon":-46.3119},
+    "ITAQUAQUECETUBA":{"lat":-23.4861,"lon":-46.3486},
+    "FERRAZ_DE_VASCONCELOS":{"lat":-23.5408,"lon":-46.3689},"FERRAZ DE VASCONCELOS":{"lat":-23.5408,"lon":-46.3689},
+    "CARAPICUIBA":{"lat":-23.5228,"lon":-46.8353},
+    "ITAPETININGA":{"lat":-23.5917,"lon":-48.0531},
+    "SAO_CAETANO_DO_SUL":{"lat":-23.6189,"lon":-46.5500},"SÃO CAETANO DO SUL":{"lat":-23.6189,"lon":-46.5500},
+    "RIBEIRAO_PIRES":{"lat":-23.7108,"lon":-46.4131},"RIBEIRÃO PIRES":{"lat":-23.7108,"lon":-46.4131},
+    "TAUBATE":{"lat":-23.0261,"lon":-45.5558},"TAUBATÉ":{"lat":-23.0261,"lon":-45.5558},
+    "SAO_JOSE_DO_RIO_PRETO":{"lat":-20.8197,"lon":-49.3794},"SÃO JOSÉ DO RIO PRETO":{"lat":-20.8197,"lon":-49.3794},
+    "ARARAS":{"lat":-22.3572,"lon":-47.3839},
+    "BOTUCATU":{"lat":-22.8858,"lon":-48.4428},
+    "MARILIA":{"lat":-22.2139,"lon":-49.9458},"MARÍLIA":{"lat":-22.2139,"lon":-49.9458},
+    "PRESIDENTE_PRUDENTE":{"lat":-22.1208,"lon":-51.3886},"PRESIDENTE PRUDENTE":{"lat":-22.1208,"lon":-51.3886},
+    "FRANCA":{"lat":-20.5386,"lon":-47.4008},
+    "BRAGANCA_PAULISTA":{"lat":-22.9519,"lon":-46.5425},"BRAGANÇA PAULISTA":{"lat":-22.9519,"lon":-46.5425},
+    "GUARA_SP":{"lat":-20.4347,"lon":-47.8258},"GUARA":{"lat":-20.4347,"lon":-47.8258},
 }
 
 def municipio_key(nome):
     n = unicodedata.normalize("NFKD", str(nome)).encode("ascii","ignore").decode("ascii").upper().strip()
     return CIDADE_COORDS.get(n)
 
-def map_municipio(df):
-    if "MUNICIPIO" not in df.columns or df.empty: return None
-    cnt = df["MUNICIPIO"].value_counts().reset_index()
-    cnt.columns = ["MUNICIPIO","cadastros"]
+def map_municipio(df, col="MUNICIPIO", label="cadastros", height=380):
+    if col not in df.columns or df.empty: return None
+    cnt = df[col].value_counts().reset_index()
+    cnt.columns = [col, label]
     rows = []
     for _, r in cnt.iterrows():
-        coords = municipio_key(r.MUNICIPIO)
+        coords = municipio_key(str(r[col]))
         if coords:
-            rows.append({"cidade": r.MUNICIPIO, "cadastros": int(r.cadastros),
+            rows.append({"cidade": r[col], label: int(r[label]),
                          "lat": coords["lat"], "lon": coords["lon"]})
     if not rows: return None
-    mdf = pd.DataFrame(rows); mx = mdf["cadastros"].max()
+    mdf = pd.DataFrame(rows); mx = mdf[label].max()
     fig = go.Figure()
     fig.add_trace(go.Scattermapbox(
         lat=mdf["lat"], lon=mdf["lon"], mode="markers",
-        marker=dict(size=mdf["cadastros"]/mx*60+14,
-                    color=mdf["cadastros"],
+        marker=dict(size=mdf[label]/mx*60+14,
+                    color=mdf[label],
                     colorscale=[[0,GREEN],[.5,ORANGE],[1,"#ef4444"]],
                     opacity=.85, showscale=False, sizemode="diameter"),
-        customdata=mdf[["cidade","cadastros"]].values,
-        hovertemplate="<b>%{customdata[0]}</b><br><b>%{customdata[1]:,} cadastros</b><extra></extra>",
+        customdata=mdf[["cidade", label]].values,
+        hovertemplate=f"<b>%{{customdata[0]}}</b><br><b>%{{customdata[1]:,}} {label}</b><extra></extra>",
         text=mdf["cidade"], name="",
     ))
     fig.update_layout(
         mapbox=dict(style="carto-positron", center={"lat":-22.5,"lon":-48.5}, zoom=5.8,
                     layers=_sp_layer(color=ORANGE)),
         margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor="rgba(0,0,0,0)",
-        showlegend=False, height=380,
+        showlegend=False, height=height,
     )
     return fig
 
@@ -505,6 +578,10 @@ PAGINAS = {
     "🏛️  Reinoh": {
         "tipo": "reinoh",
         "tabela": "reinoh_val",
+    },
+    "🗳️  Zona Eleitoral": {
+        "tipo": "zona_eleitoral",
+        "tabela": "Guti_zona_eleitoral",
     },
 }
 
@@ -563,6 +640,10 @@ if tipo == "reinoh":
     with st.spinner(""):
         try:    df_all = load_reinoh(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "zona_eleitoral":
+    with st.spinner(""):
+        try:    df_all = load_zona_eleitoral(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
     with st.spinner(""):
         try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
@@ -587,6 +668,8 @@ pct_sp   = f"{leads_sp/total*100:.0f}% do total" if total else ""
 # ── renderização por tipo de página ───────────────────────────────────────────
 if tipo == "reinoh":
     tab_vis, tab_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
+elif tipo == "zona_eleitoral":
+    tab_ze_vis, tab_ze_leads = st.tabs(["  📊  Visão Geral  ","  📋  Leads  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -726,6 +809,156 @@ if tipo == "reinoh":
         st.dataframe(df_show[show_cols], use_container_width=True, hide_index=True, height=560)
 
     st.stop()   # reinoh page complete — don't render leads tabs below
+
+# ══════════════════════════ ZONA ELEITORAL ═══════════════════════════════════
+if tipo == "zona_eleitoral":
+    total_ze = len(df)
+    n_cidades    = df["CIDADE"].nunique()        if "CIDADE"       in df.columns else 0
+    n_campanhas  = df["UTM_CAMPAIGN"].nunique()  if "UTM_CAMPAIGN" in df.columns else 0
+    n_fontes     = df["UTM_SOURCE"].nunique()    if "UTM_SOURCE"   in df.columns else 0
+
+    with tab_ze_vis:
+        # KPIs
+        k1,k2,k3,k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE,"Total de Leads",fmt_num(total_ze),
+                             badge=f"Período: {periodo}",badge_color="rgba(139,92,246,.12)",badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE,"Cidades",fmt_num(n_cidades),
+                             badge="municípios alcançados",badge_color="rgba(249,115,22,.12)",badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN,"Campanhas",fmt_num(n_campanhas),
+                             badge="utm_campaign distintas",badge_color="rgba(16,185,129,.12)",badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER,"Fontes",fmt_num(n_fontes),
+                             badge="utm_source distintas",badge_color="rgba(245,158,11,.12)",badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        if df.empty:
+            st.info("Nenhum lead no período selecionado."); st.stop()
+
+        # Crescimento
+        section("Crescimento")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Leads por dia</div>'
+                        '<div class="chart-sub">Evolução no período selecionado</div>',
+                        unsafe_allow_html=True)
+            st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar":False})
+
+        # Mapa
+        section("Distribuição Geográfica")
+        mfig_ze = map_municipio(df, col="CIDADE", label="leads", height=440)
+        if mfig_ze:
+            st.plotly_chart(mfig_ze, use_container_width=True,
+                            config={"displayModeBar":False, "scrollZoom":True})
+        elif "CIDADE" in df.columns:
+            with st.container(border=True):
+                rc = df["CIDADE"].fillna("Não informada").value_counts().head(20).reset_index()
+                rc.columns = ["Cidade","Qtd"]
+                rc = rc.sort_values("Qtd")
+                fig = go.Figure(go.Bar(
+                    x=rc["Qtd"], y=rc["Cidade"], orientation="h",
+                    marker=dict(color=rc["Qtd"], colorscale=[[0,PURPLE],[1,ORANGE]],
+                                showscale=False, line=dict(width=0)),
+                    text=rc["Qtd"], textposition="outside",
+                    textfont=dict(color=MUTED2, size=11),
+                ))
+                fig.update_layout(**base_layout(height=480,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False),
+                    bargap=0.3))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        # Origem
+        section("Origem dos Leads")
+        oc1, oc2 = st.columns(2, gap="medium")
+
+        with oc1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Top Cidades</div>'
+                            '<div class="chart-sub">Volume de leads por município</div>',
+                            unsafe_allow_html=True)
+                if "CIDADE" in df.columns:
+                    rci = df["CIDADE"].fillna("Não informada").value_counts().head(10).reset_index()
+                    rci.columns = ["Cidade","Qtd"]; rci = rci.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rci["Qtd"], y=rci["Cidade"], orientation="h",
+                        marker=dict(color=rci["Qtd"], colorscale=[[0,PURPLE],[1,ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rci["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=320,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        with oc2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Campanhas (UTM)</div>'
+                            '<div class="chart-sub">Leads por utm_campaign</div>',
+                            unsafe_allow_html=True)
+                if "UTM_CAMPAIGN" in df.columns:
+                    rc2 = (df["UTM_CAMPAIGN"].fillna("(direto)")
+                           .value_counts().head(10).reset_index())
+                    rc2.columns = ["Campanha","Qtd"]; rc2 = rc2.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rc2["Qtd"], y=rc2["Campanha"], orientation="h",
+                        marker=dict(color=rc2["Qtd"], colorscale=[[0,GREEN],[1,AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rc2["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=320,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        # Métricas detalhadas
+        section("Métricas Detalhadas")
+        dt1, dt2 = st.columns(2, gap="medium")
+
+        with dt1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Cidade</div>',
+                            unsafe_allow_html=True)
+                if "CIDADE" in df.columns:
+                    rtc = df["CIDADE"].fillna("Não informada").value_counts().reset_index()
+                    rtc.columns = ["Cidade","Leads"]
+                    rtc["% Total"] = (rtc["Leads"]/total_ze*100).round(1).astype(str)+"%"
+                    st.dataframe(rtc, use_container_width=True, hide_index=True, height=320)
+
+        with dt2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Fonte (UTM Source)</div>',
+                            unsafe_allow_html=True)
+                if "UTM_SOURCE" in df.columns:
+                    rts = df["UTM_SOURCE"].fillna("(direto)").value_counts().reset_index()
+                    rts.columns = ["Fonte","Leads"]
+                    rts["% Total"] = (rts["Leads"]/total_ze*100).round(1).astype(str)+"%"
+                    st.dataframe(rts, use_container_width=True, hide_index=True, height=320)
+
+    with tab_ze_leads:
+        ls, lc = st.columns([4,1])
+        ze_search = ls.text_input("", placeholder="🔍  Buscar por nome, cidade, campanha...",
+                                  label_visibility="collapsed")
+        lc.markdown(f'<p style="color:{MUTED2};font-size:12px;text-align:right;padding-top:10px">'
+                    f'{fmt_num(len(df))} registros</p>', unsafe_allow_html=True)
+        df_ze = df.copy()
+        if ze_search:
+            ze_cols = ["NOME","EMAIL","CIDADE","FONTE","UTM_SOURCE","UTM_CAMPAIGN"]
+            ze_mask = pd.Series(False, index=df_ze.index)
+            for c in ze_cols:
+                if c in df_ze.columns:
+                    ze_mask |= df_ze[c].astype(str).str.contains(ze_search, case=False, na=False)
+            df_ze = df_ze[ze_mask]
+        ze_show = [c for c in ["DATA","NOME","CIDADE","FONTE","UTM_CAMPAIGN","UTM_SOURCE",
+                                "UTM_MEDIUM","TELEFONE","EMAIL","REF"]
+                   if c in df_ze.columns]
+        st.dataframe(df_ze[ze_show], use_container_width=True, hide_index=True, height=560)
+
+    st.stop()   # zona_eleitoral complete
 
 # ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:

@@ -312,6 +312,18 @@ def load_reinoh() -> pd.DataFrame:
         df["DDD"] = tel.apply(_ddd)
     return df
 
+@st.cache_data(ttl=86400)
+def _sp_geojson():
+    try:
+        r = requests.get(
+            "https://servicodados.ibge.gov.br/api/v3/malhas/estados/35"
+            "?formato=application/vnd.geo+json&resolucao=5",
+            timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
 @st.cache_data(ttl=300)
 def get_spend(since, until):
     if not META_TOKEN or not META_ACCOUNT: return None
@@ -331,6 +343,12 @@ def base_layout(**kw):
     return dict(template=CHART_TPL, paper_bgcolor=CHART_PAPER, plot_bgcolor=CHART_PLOT,
                 font=dict(family="Inter",color=MUTED), margin=dict(l=0,r=0,t=0,b=0),
                 **kw)
+
+def _sp_layer(color=ORANGE, width=2.5):
+    gj = _sp_geojson()
+    if not gj: return []
+    return [dict(sourcetype="geojson", source=gj, type="line",
+                 color=color, line=dict(width=width))]
 
 def map_chart(df):
     if "DDD" not in df.columns or df.empty: return go.Figure()
@@ -362,7 +380,8 @@ def map_chart(df):
         hoverinfo="skip", name="",
     ))
     fig.update_layout(
-        mapbox=dict(style=MAP_STYLE, center={"lat":-22.5,"lon":-48.5}, zoom=5.8),
+        mapbox=dict(style=MAP_STYLE, center={"lat":-22.5,"lon":-48.5}, zoom=5.8,
+                    layers=_sp_layer()),
         margin=dict(r=0,t=0,l=0,b=0),
         paper_bgcolor="rgba(0,0,0,0)",
         showlegend=False, height=480,
@@ -467,7 +486,8 @@ def map_municipio(df):
         text=mdf["cidade"], name="",
     ))
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center={"lat":-22.5,"lon":-48.5}, zoom=5.8),
+        mapbox=dict(style="carto-positron", center={"lat":-22.5,"lon":-48.5}, zoom=5.8,
+                    layers=_sp_layer(color=ORANGE)),
         margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor="rgba(0,0,0,0)",
         showlegend=False, height=380,
     )

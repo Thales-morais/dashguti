@@ -362,7 +362,7 @@ def map_chart(df):
         hoverinfo="skip", name="",
     ))
     fig.update_layout(
-        mapbox=dict(style=MAP_STYLE, center={"lat":-22.2,"lon":-48.8}, zoom=5.8),
+        mapbox=dict(style=MAP_STYLE, center={"lat":-22.5,"lon":-48.5}, zoom=5.8),
         margin=dict(r=0,t=0,l=0,b=0),
         paper_bgcolor="rgba(0,0,0,0)",
         showlegend=False, height=480,
@@ -467,7 +467,7 @@ def map_municipio(df):
         text=mdf["cidade"], name="",
     ))
     fig.update_layout(
-        mapbox=dict(style="carto-positron", center={"lat":-23.0,"lon":-47.0}, zoom=7),
+        mapbox=dict(style="carto-positron", center={"lat":-22.5,"lon":-48.5}, zoom=5.8),
         margin=dict(r=0,t=0,l=0,b=0), paper_bgcolor="rgba(0,0,0,0)",
         showlegend=False, height=380,
     )

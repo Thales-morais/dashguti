@@ -934,7 +934,7 @@ if tipo == "zona_eleitoral":
                 st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Fonte (UTM Source)</div>',
                             unsafe_allow_html=True)
                 if "UTM_SOURCE" in df.columns:
-                    rts = df["UTM_SOURCE"].dropna().value_counts().reset_index()
+                    rts = df["UTM_SOURCE"].fillna("(direto)").value_counts().reset_index()
                     rts.columns = ["Fonte","Leads"]
                     rts["% Total"] = (rts["Leads"]/total_ze*100).round(1).astype(str)+"%"
                     st.dataframe(rts, use_container_width=True, hide_index=True, height=320)

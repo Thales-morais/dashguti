@@ -895,7 +895,7 @@ if tipo == "zona_eleitoral":
 
         with oc2:
             with st.container(border=True):
-                st.markdown('<div class="chart-title">Campanhas (UTM)</div>'
+                st.markdown('<div class="chart-title">Campanhas (UTM) — ranking por zona</div>'
                             '<div class="chart-sub">Leads por utm_campaign</div>',
                             unsafe_allow_html=True)
                 if "UTM_CAMPAIGN" in df.columns:

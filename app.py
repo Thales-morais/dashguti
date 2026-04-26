@@ -1,5 +1,5 @@
 import os, json, re, requests, unicodedata
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -362,6 +362,36 @@ def load_zona_eleitoral() -> pd.DataFrame:
         df[["UTM_SOURCE","UTM_CAMPAIGN","UTM_MEDIUM"]] = df["REF"].apply(_parse_utm)
     return df
 
+@st.cache_data(ttl=20)
+def load_andreia() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    table = quote("base protetores andreia", safe="")
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/{table}?select=*&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    def _norm(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
+        return re.sub(r"[^\w]+", "_", c.strip()).upper().strip("_")
+    df.columns = [_norm(c) for c in df.columns]
+    # date col (Supabase created_at ou similar)
+    date_col = next((c for c in df.columns if "CRIADO" in c or "DATA" in c or "DATE" in c or "CREATED" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
+    # normaliza coluna N°
+    col_num = next((c for c in df.columns if c in ("N_", "N", "NUM", "NUMERO", "NUMERO_")), None)
+    if col_num and col_num != "NUM": df = df.rename(columns={col_num: "NUM"})
+    return df
+
 @st.cache_data(ttl=86400)
 def _sp_geojson():
     try:
@@ -531,6 +561,77 @@ CIDADE_COORDS = {
     "GUARA_SP":{"lat":-20.4347,"lon":-47.8258},"GUARA":{"lat":-20.4347,"lon":-47.8258},
 }
 
+BAIRRO_COORDS = {
+    "JD CUMBICA":          {"lat":-23.4183,"lon":-46.4611},
+    "JARDIM CUMBICA":      {"lat":-23.4183,"lon":-46.4611},
+    "RES PRQ CUMBICA":     {"lat":-23.4150,"lon":-46.4680},
+    "JD PTE ALTA I":       {"lat":-23.4320,"lon":-46.4720},
+    "JD PTE ALTA":         {"lat":-23.4320,"lon":-46.4720},
+    "PRQ RES BAMBI":       {"lat":-23.4580,"lon":-46.5050},
+    "JD STA HELENA":       {"lat":-23.4650,"lon":-46.4830},
+    "JARDIM SANTA HELENA": {"lat":-23.4650,"lon":-46.4830},
+    "JD ADRIANA":          {"lat":-23.4700,"lon":-46.4850},
+    "JD TABATINGA":        {"lat":-23.4480,"lon":-46.5180},
+    "JARDIM TABATINGA":    {"lat":-23.4480,"lon":-46.5180},
+    "JD S JOÃO":           {"lat":-23.4820,"lon":-46.4960},
+    "JARDIM SÃO JOÃO":     {"lat":-23.4820,"lon":-46.4960},
+    "MACEDO":              {"lat":-23.4650,"lon":-46.5120},
+    "A GARIBALDI":         {"lat":-23.4560,"lon":-46.5200},
+    "VL UNIÃO":            {"lat":-23.4780,"lon":-46.5070},
+    "VILA UNIÃO":          {"lat":-23.4780,"lon":-46.5070},
+    "JD HANNA":            {"lat":-23.4730,"lon":-46.5160},
+    "JD PARAVENTI":        {"lat":-23.4900,"lon":-46.5130},
+    "PRQ STOS DUMONT":     {"lat":-23.4550,"lon":-46.5260},
+    "JD TRANQÜILIDADE":    {"lat":-23.5030,"lon":-46.5290},
+    "JD TRANQUILIDADE":    {"lat":-23.5030,"lon":-46.5290},
+    "C SOBERANA":          {"lat":-23.4480,"lon":-46.5390},
+    "JD STA PAULA":        {"lat":-23.4860,"lon":-46.5010},
+    "JARDIM SANTA PAULA":  {"lat":-23.4860,"lon":-46.5010},
+    "PRQ PIRATININGA":     {"lat":-23.4980,"lon":-46.5230},
+    "PRQ CONTINENTAL II":  {"lat":-23.4440,"lon":-46.5120},
+    "JD DIVINOLÂNDIA":     {"lat":-23.4760,"lon":-46.5300},
+    "JD DIVOLANDIA":       {"lat":-23.4760,"lon":-46.5300},
+    "JD VL GALVÃO":        {"lat":-23.4910,"lon":-46.5190},
+    "JD CARDOSO":          {"lat":-23.4870,"lon":-46.5250},
+    "JD ADRIANA":          {"lat":-23.4700,"lon":-46.4890},
+}
+
+def bairro_key(nome):
+    n = unicodedata.normalize("NFKD", str(nome)).encode("ascii","ignore").decode("ascii").upper().strip()
+    return BAIRRO_COORDS.get(n) or BAIRRO_COORDS.get(nome.upper().strip())
+
+def map_bairro(df, col="BAIRRO", label="leads", height=440):
+    if col not in df.columns or df.empty: return None
+    cnt = df[col].value_counts().reset_index()
+    cnt.columns = [col, label]
+    rows = []
+    for _, r in cnt.iterrows():
+        coords = bairro_key(str(r[col]))
+        if coords:
+            rows.append({"bairro": r[col], label: int(r[label]),
+                         "lat": coords["lat"], "lon": coords["lon"]})
+    if not rows: return None
+    mdf = pd.DataFrame(rows); mx = mdf[label].max()
+    fig = go.Figure()
+    fig.add_trace(go.Scattermapbox(
+        lat=mdf["lat"], lon=mdf["lon"],
+        mode="markers",
+        marker=dict(
+            size=mdf[label].apply(lambda v: 14 + 32*(v/mx)**0.5),
+            color=mdf[label], colorscale=[[0,PURPLE],[0.5,ORANGE],[1,"#ef4444"]],
+            showscale=False, opacity=0.85,
+        ),
+        text=mdf.apply(lambda r: f"<b>{r['bairro']}</b><br>{fmt_num(r[label])} {label}", axis=1),
+        hoverinfo="text",
+    ))
+    fig.update_layout(
+        mapbox=dict(style=MAP_STYLE, center=dict(lat=-23.460, lon=-46.510), zoom=11.5,
+                    layers=_sp_layer()),
+        **base_layout(height=height),
+        margin=dict(l=0,r=0,t=0,b=0),
+    )
+    return fig
+
 def municipio_key(nome):
     n = unicodedata.normalize("NFKD", str(nome)).encode("ascii","ignore").decode("ascii").upper().strip()
     return CIDADE_COORDS.get(n)
@@ -582,6 +683,10 @@ PAGINAS = {
     "🗳️  Zona Eleitoral": {
         "tipo": "zona_eleitoral",
         "tabela": "Guti_zona_eleitoral",
+    },
+    "🏘️  Latidah Andreia": {
+        "tipo": "andreia",
+        "tabela": "base protetores andreia",
     },
 }
 
@@ -644,6 +749,10 @@ elif tipo == "zona_eleitoral":
     with st.spinner(""):
         try:    df_all = load_zona_eleitoral(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "andreia":
+    with st.spinner(""):
+        try:    df_all = load_andreia(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
     with st.spinner(""):
         try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
@@ -670,6 +779,8 @@ if tipo == "reinoh":
     tab_vis, tab_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
 elif tipo == "zona_eleitoral":
     tab_ze_vis, tab_ze_leads = st.tabs(["  📊  Visão Geral  ","  📋  Leads  "])
+elif tipo == "andreia":
+    tab_an_vis, tab_an_cont = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -959,6 +1070,176 @@ if tipo == "zona_eleitoral":
         st.dataframe(df_ze[ze_show], use_container_width=True, hide_index=True, height=560)
 
     st.stop()   # zona_eleitoral complete
+
+# ══════════════════════════ LATIDAH ANDREIA ═══════════════════════════════════
+if tipo == "andreia":
+    BAIRRO_COL = next((c for c in df.columns if "BAIRRO" in c), "BAIRRO")
+    CEP_COL    = next((c for c in df.columns if "CEP"    in c), "CEP")
+    TIPO_COL   = next((c for c in df.columns if c == "TIPO"), "TIPO")
+    LOG_COL    = next((c for c in df.columns if "LOGRADOURO" in c), "LOGRADOURO")
+
+    total_an   = len(df)
+    n_bairros  = df[BAIRRO_COL].nunique() if BAIRRO_COL in df.columns else 0
+    n_ceps     = df[CEP_COL].nunique()    if CEP_COL    in df.columns else 0
+    n_tipos    = df[TIPO_COL].nunique()   if TIPO_COL   in df.columns else 0
+
+    with tab_an_vis:
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(total_an),
+                             badge="contatos cadastrados", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Bairros", fmt_num(n_bairros),
+                             badge="bairros alcançados", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "CEPs", fmt_num(n_ceps),
+                             badge="regiões distintas", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER, "Tipos", fmt_num(n_tipos),
+                             badge="tipos de logradouro", badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        if df.empty:
+            st.info("Nenhum contato encontrado."); st.stop()
+
+        # ── Mapa por Bairro ────────────────────────────────────────────────────
+        section("Distribuição Geográfica")
+        mfig_an = map_bairro(df, col=BAIRRO_COL, label="leads", height=460)
+        if mfig_an:
+            st.plotly_chart(mfig_an, use_container_width=True,
+                            config={"displayModeBar": False, "scrollZoom": True})
+        else:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Ranking de Bairros</div>'
+                            '<div class="chart-sub">Volume de leads por bairro</div>',
+                            unsafe_allow_html=True)
+                rb = df[BAIRRO_COL].fillna("Não informado").value_counts().head(20).reset_index()
+                rb.columns = ["Bairro", "Qtd"]; rb = rb.sort_values("Qtd")
+                fig = go.Figure(go.Bar(
+                    x=rb["Qtd"], y=rb["Bairro"], orientation="h",
+                    marker=dict(color=rb["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                showscale=False, line=dict(width=0)),
+                    text=rb["Qtd"], textposition="outside",
+                    textfont=dict(color=MUTED2, size=11),
+                ))
+                fig.update_layout(**base_layout(height=520,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                    bargap=0.3))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Ranking de Bairros + Tipo de Logradouro ────────────────────────────
+        section("Análise de Localização")
+        col_a, col_b = st.columns(2, gap="medium")
+
+        with col_a:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Top Bairros</div>'
+                            '<div class="chart-sub">Bairros com maior concentração de leads</div>',
+                            unsafe_allow_html=True)
+                if BAIRRO_COL in df.columns:
+                    rb2 = df[BAIRRO_COL].fillna("Não informado").value_counts().head(15).reset_index()
+                    rb2.columns = ["Bairro", "Qtd"]; rb2 = rb2.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rb2["Qtd"], y=rb2["Bairro"], orientation="h",
+                        marker=dict(color=rb2["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rb2["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=380,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with col_b:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Tipo de Logradouro</div>'
+                            '<div class="chart-sub">Distribuição por RUA / AVENIDA / ESTRADA</div>',
+                            unsafe_allow_html=True)
+                if TIPO_COL in df.columns:
+                    rt = df[TIPO_COL].fillna("Não informado").value_counts().reset_index()
+                    rt.columns = ["Tipo", "Qtd"]; rt = rt.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rt["Qtd"], y=rt["Tipo"], orientation="h",
+                        marker=dict(color=rt["Qtd"], colorscale=[[0, GREEN],[1, AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rt["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=380,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.35))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Top Logradouros ────────────────────────────────────────────────────
+        section("Top Logradouros")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Ruas e Avenidas com mais leads</div>'
+                        '<div class="chart-sub">Top 15 logradouros por volume</div>',
+                        unsafe_allow_html=True)
+            if LOG_COL in df.columns:
+                rl = df[LOG_COL].fillna("Não informado").value_counts().head(15).reset_index()
+                rl.columns = ["Logradouro", "Qtd"]; rl = rl.sort_values("Qtd")
+                fig = go.Figure(go.Bar(
+                    x=rl["Qtd"], y=rl["Logradouro"], orientation="h",
+                    marker=dict(color=rl["Qtd"], colorscale=[[0, PURPLE],[0.5, ORANGE],[1, "#ef4444"]],
+                                showscale=False, line=dict(width=0)),
+                    text=rl["Qtd"], textposition="outside",
+                    textfont=dict(color=MUTED2, size=11),
+                ))
+                fig.update_layout(**base_layout(height=420,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                    bargap=0.3))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Métricas detalhadas ────────────────────────────────────────────────
+        section("Métricas Detalhadas")
+        dt1, dt2 = st.columns(2, gap="medium")
+
+        with dt1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Bairro</div>',
+                            unsafe_allow_html=True)
+                if BAIRRO_COL in df.columns:
+                    tb = df[BAIRRO_COL].fillna("Não informado").value_counts().reset_index()
+                    tb.columns = ["Bairro", "Leads"]
+                    tb["% Total"] = (tb["Leads"] / total_an * 100).round(1).astype(str) + "%"
+                    st.dataframe(tb, use_container_width=True, hide_index=True, height=340)
+
+        with dt2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por CEP</div>',
+                            unsafe_allow_html=True)
+                if CEP_COL in df.columns:
+                    tc = df[CEP_COL].fillna("Não informado").value_counts().reset_index()
+                    tc.columns = ["CEP", "Leads"]
+                    tc["% Total"] = (tc["Leads"] / total_an * 100).round(1).astype(str) + "%"
+                    st.dataframe(tc, use_container_width=True, hide_index=True, height=340)
+
+    with tab_an_cont:
+        sc, cc = st.columns([4, 1])
+        an_search = sc.text_input("", placeholder="🔍  Buscar por nome, bairro, CEP, logradouro...",
+                                  label_visibility="collapsed")
+        cc.markdown(f'<p style="color:{MUTED2};font-size:12px;text-align:right;padding-top:10px">'
+                    f'{fmt_num(total_an)} registros</p>', unsafe_allow_html=True)
+        df_an = df.copy()
+        if an_search:
+            an_cols = ["NOME", BAIRRO_COL, CEP_COL, LOG_COL, "TELEFONE", "CELULAR"]
+            an_mask = pd.Series(False, index=df_an.index)
+            for c in an_cols:
+                if c in df_an.columns:
+                    an_mask |= df_an[c].astype(str).str.contains(an_search, case=False, na=False)
+            df_an = df_an[an_mask]
+        an_show = [c for c in ["NOME", "TELEFONE", "CELULAR", BAIRRO_COL, CEP_COL,
+                                TIPO_COL, LOG_COL, "NUM", "RG", "CPF"]
+                   if c in df_an.columns]
+        st.dataframe(df_an[an_show], use_container_width=True, hide_index=True, height=560)
+
+    st.stop()   # andreia complete
 
 # ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:

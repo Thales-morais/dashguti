@@ -628,7 +628,6 @@ def map_bairro(df, col="BAIRRO", label="leads", height=440):
         mapbox=dict(style=MAP_STYLE, center=dict(lat=-23.460, lon=-46.510), zoom=11.5,
                     layers=_sp_layer()),
         **base_layout(height=height),
-        margin=dict(l=0,r=0,t=0,b=0),
     )
     return fig
 

@@ -899,7 +899,7 @@ if tipo == "zona_eleitoral":
                             '<div class="chart-sub">Leads por utm_campaign</div>',
                             unsafe_allow_html=True)
                 if "UTM_CAMPAIGN" in df.columns:
-                    rc2 = (df["UTM_CAMPAIGN"].fillna("(direto)")
+                    rc2 = (df["UTM_CAMPAIGN"].dropna()
                            .value_counts().head(10).reset_index())
                     rc2.columns = ["Campanha","Qtd"]; rc2 = rc2.sort_values("Qtd")
                     fig = go.Figure(go.Bar(
@@ -934,7 +934,7 @@ if tipo == "zona_eleitoral":
                 st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Fonte (UTM Source)</div>',
                             unsafe_allow_html=True)
                 if "UTM_SOURCE" in df.columns:
-                    rts = df["UTM_SOURCE"].fillna("(direto)").value_counts().reset_index()
+                    rts = df["UTM_SOURCE"].dropna().value_counts().reset_index()
                     rts.columns = ["Fonte","Leads"]
                     rts["% Total"] = (rts["Leads"]/total_ze*100).round(1).astype(str)+"%"
                     st.dataframe(rts, use_container_width=True, hide_index=True, height=320)

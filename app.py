@@ -899,7 +899,7 @@ if tipo == "zona_eleitoral":
                             '<div class="chart-sub">Leads por utm_campaign</div>',
                             unsafe_allow_html=True)
                 if "UTM_CAMPAIGN" in df.columns:
-                    rc2 = (df["UTM_CAMPAIGN"].fillna("(direto)")
+                    rc2 = (df["UTM_CAMPAIGN"].dropna()
                            .value_counts().head(10).reset_index())
                     rc2.columns = ["Campanha","Qtd"]; rc2 = rc2.sort_values("Qtd")
                     fig = go.Figure(go.Bar(

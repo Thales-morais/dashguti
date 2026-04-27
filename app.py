@@ -417,6 +417,46 @@ def get_spend(since, until):
     except Exception: pass
     return None
 
+@st.cache_data(ttl=20)
+def load_buffo() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/base_buffo?select=*&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    def _norm(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
+        return re.sub(r"[^\w]+", "_", c.strip()).upper().strip("_")
+    df.columns = [_norm(c) for c in df.columns]
+    date_col = next((c for c in df.columns if "DATA_HORA" in c or "CREATED" in c), None) \
+               or next((c for c in df.columns if "DATA" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
+    pet_col = next((c for c in df.columns if "CACHORRO" in c or ("ANIMAL" in c and "NOME" not in c)), None)
+    if pet_col:
+        df = df.rename(columns={pet_col: "TIPO_ANIMAL"})
+        df["TIPO_ANIMAL"] = df["TIPO_ANIMAL"].str.upper().str.strip()
+    if "GENERO" in df.columns:
+        df["GENERO"] = df["GENERO"].str.capitalize().str.strip()
+    bairro_col = next((c for c in df.columns if "BAIRRO" in c), None)
+    if bairro_col and bairro_col != "BAIRRO":
+        df = df.rename(columns={bairro_col: "BAIRRO"})
+    if "BAIRRO" in df.columns:
+        df["BAIRRO"] = df["BAIRRO"].str.upper().str.strip()
+    comp_col = next((c for c in df.columns if "COMPLEMENT" in c), None)
+    if comp_col and comp_col != "COMPLEMENTO":
+        df = df.rename(columns={comp_col: "COMPLEMENTO"})
+    return df
+
 
 # ── charts ────────────────────────────────────────────────────────────────────
 def base_layout(**kw):
@@ -594,6 +634,42 @@ BAIRRO_COORDS = {
     "JD VL GALVÃO":        {"lat":-23.4910,"lon":-46.5190},
     "JD CARDOSO":          {"lat":-23.4870,"lon":-46.5250},
     "JD ADRIANA":          {"lat":-23.4700,"lon":-46.4890},
+    # SP Zona Leste
+    "VILA CARRAO":         {"lat":-23.5389,"lon":-46.5417},
+    "VILA CARRÃO":         {"lat":-23.5389,"lon":-46.5417},
+    "VILA CARRAO":         {"lat":-23.5389,"lon":-46.5417},
+    "VL CARRÃO":           {"lat":-23.5389,"lon":-46.5417},
+    "VL CARRAO":           {"lat":-23.5389,"lon":-46.5417},
+    "VILA FORMOSA":        {"lat":-23.5381,"lon":-46.5283},
+    "VL FORMOSA":          {"lat":-23.5381,"lon":-46.5283},
+    "TATUAPE":             {"lat":-23.5372,"lon":-46.5775},
+    "TATUAPÉ":             {"lat":-23.5372,"lon":-46.5775},
+    "VILA RICA":           {"lat":-23.5550,"lon":-46.5200},
+    "VL RICA":             {"lat":-23.5550,"lon":-46.5200},
+    "JARDIM SANTA MARIA":  {"lat":-23.5700,"lon":-46.5100},
+    "JD SANTA MARIA":      {"lat":-23.5700,"lon":-46.5100},
+    "PENHA":               {"lat":-23.5239,"lon":-46.5378},
+    "VILA MATILDE":        {"lat":-23.5297,"lon":-46.5186},
+    "VL MATILDE":          {"lat":-23.5297,"lon":-46.5186},
+    "AGUA RASA":           {"lat":-23.5514,"lon":-46.5664},
+    "ÁGUA RASA":           {"lat":-23.5514,"lon":-46.5664},
+    "MOOCA":               {"lat":-23.5500,"lon":-46.5950},
+    "BELENZINHO":          {"lat":-23.5444,"lon":-46.6036},
+    "ANALIA FRANCO":       {"lat":-23.5442,"lon":-46.5289},
+    "ANÁLIA FRANCO":       {"lat":-23.5442,"lon":-46.5289},
+    "VILA PRUDENTE":       {"lat":-23.5786,"lon":-46.5550},
+    "VL PRUDENTE":         {"lat":-23.5786,"lon":-46.5550},
+    "SAPOPEMBA":           {"lat":-23.5900,"lon":-46.5086},
+    "CIDADE LIDER":        {"lat":-23.5756,"lon":-46.4836},
+    "CIDADE LÍDER":        {"lat":-23.5756,"lon":-46.4836},
+    "ITAQUERA":            {"lat":-23.5386,"lon":-46.4558},
+    "VILA IONE":           {"lat":-23.5550,"lon":-46.5350},
+    "VL IONE":             {"lat":-23.5550,"lon":-46.5350},
+    "PARQUE NOVO MUNDO":   {"lat":-23.5039,"lon":-46.5614},
+    "PRQ NOVO MUNDO":      {"lat":-23.5039,"lon":-46.5614},
+    "CANGAIBA":            {"lat":-23.4981,"lon":-46.5319},
+    "VILA ESPERANCA":      {"lat":-23.5233,"lon":-46.5094},
+    "VILA ESPERANÇA":      {"lat":-23.5233,"lon":-46.5094},
 }
 
 def bairro_key(nome):
@@ -687,6 +763,10 @@ PAGINAS = {
         "tipo": "andreia",
         "tabela": "base protetores andreia",
     },
+    "🐾  Latidah Buffo": {
+        "tipo": "buffo",
+        "tabela": "base_buffo",
+    },
 }
 
 with st.sidebar:
@@ -752,6 +832,10 @@ elif tipo == "andreia":
     with st.spinner(""):
         try:    df_all = load_andreia(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "buffo":
+    with st.spinner(""):
+        try:    df_all = load_buffo(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
     with st.spinner(""):
         try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
@@ -780,6 +864,8 @@ elif tipo == "zona_eleitoral":
     tab_ze_vis, tab_ze_leads = st.tabs(["  📊  Visão Geral  ","  📋  Leads  "])
 elif tipo == "andreia":
     tab_an_vis, tab_an_cont = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
+elif tipo == "buffo":
+    tab_bf_vis, tab_bf_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -1239,6 +1325,246 @@ if tipo == "andreia":
         st.dataframe(df_an[an_show], use_container_width=True, hide_index=True, height=560)
 
     st.stop()   # andreia complete
+
+# ══════════════════════════════ LATIDAH BUFFO ════════════════════════════════
+if tipo == "buffo":
+    # detecta colunas
+    PET_COL    = "TIPO_ANIMAL" if "TIPO_ANIMAL" in df.columns else None
+    GEN_COL    = "GENERO"      if "GENERO"      in df.columns else None
+    NOME_PET   = next((c for c in df.columns if "NOME" in c and "ANIMAL" in c), None) \
+                 or next((c for c in df.columns if "NOME" in c and "COMPLETO" not in c and "ASSE" not in c), None)
+    EQUIPE_COL = next((c for c in df.columns if "EQUIPE" in c), None)
+    COMP_COL   = "COMPLEMENTO" if "COMPLEMENTO" in df.columns else None
+    IDADE_COL  = next((c for c in df.columns if "IDADE" in c), None)
+    ASSE_COL   = next((c for c in df.columns if "ASSE" in c or "ASSESSOR" in c), None)
+
+    total_bf   = len(df)
+    n_bairros  = df["BAIRRO"].nunique()         if "BAIRRO"    in df.columns else 0
+    n_equipes  = df[EQUIPE_COL].nunique()       if EQUIPE_COL  else 0
+    n_ceps     = df["CEP"].nunique()            if "CEP"       in df.columns else 0
+
+    # contagem cachorros vs gatos
+    cachorros = gatos = 0
+    if PET_COL:
+        cachorros = df[PET_COL].str.contains("CACHORRO", na=False).sum()
+        gatos     = df[PET_COL].str.contains("GATO", na=False).sum()
+
+    with tab_bf_vis:
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(total_bf),
+                             badge=f"Período: {periodo}", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Bairros", fmt_num(n_bairros),
+                             badge="regiões alcançadas", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "Cachorros", fmt_num(cachorros),
+                             badge=f"{int(cachorros/total_bf*100) if total_bf else 0}% dos pets",
+                             badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER, "Gatos", fmt_num(gatos),
+                             badge=f"{int(gatos/total_bf*100) if total_bf else 0}% dos pets",
+                             badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        if df.empty:
+            st.info("Nenhum cadastro no período selecionado."); st.stop()
+
+        # ── Crescimento ────────────────────────────────────────────────────────
+        if "DATA" in df.columns:
+            section("Crescimento")
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Cadastros por dia</div>'
+                            '<div class="chart-sub">Evolução no período selecionado</div>',
+                            unsafe_allow_html=True)
+                st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar": False})
+
+        # ── Mapa por Bairro ────────────────────────────────────────────────────
+        section("Distribuição Geográfica")
+        mfig_bf = map_bairro(df, col="BAIRRO", label="leads", height=460) if "BAIRRO" in df.columns else None
+        if mfig_bf:
+            st.plotly_chart(mfig_bf, use_container_width=True,
+                            config={"displayModeBar": False, "scrollZoom": True})
+        elif "BAIRRO" in df.columns:
+            with st.container(border=True):
+                rb = df["BAIRRO"].fillna("Não informado").value_counts().head(20).reset_index()
+                rb.columns = ["Bairro", "Qtd"]; rb = rb.sort_values("Qtd")
+                fig = go.Figure(go.Bar(
+                    x=rb["Qtd"], y=rb["Bairro"], orientation="h",
+                    marker=dict(color=rb["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                showscale=False, line=dict(width=0)),
+                    text=rb["Qtd"], textposition="outside",
+                    textfont=dict(color=MUTED2, size=11),
+                ))
+                fig.update_layout(**base_layout(height=520,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                    bargap=0.3))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Pets ──────────────────────────────────────────────────────────────
+        section("Perfil dos Pets")
+        p1, p2, p3 = st.columns(3, gap="medium")
+
+        with p1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Cachorro ou Gato</div>'
+                            '<div class="chart-sub">Distribuição por tipo de animal</div>',
+                            unsafe_allow_html=True)
+                if PET_COL:
+                    tp = df[PET_COL].fillna("Não informado").value_counts().reset_index()
+                    tp.columns = ["Tipo", "Qtd"]; tp = tp.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=tp["Qtd"], y=tp["Tipo"], orientation="h",
+                        marker=dict(color=[GREEN if "CACHORRO" in str(t) else AMBER if "GATO" in str(t) else MUTED
+                                           for t in tp["Tipo"]],
+                                    line=dict(width=0)),
+                        text=tp["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=260,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.4))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with p2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Gênero do Pet</div>'
+                            '<div class="chart-sub">Distribuição por sexo</div>',
+                            unsafe_allow_html=True)
+                if GEN_COL:
+                    tg = df[GEN_COL].fillna("Não informado").value_counts().reset_index()
+                    tg.columns = ["Gênero", "Qtd"]; tg = tg.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=tg["Qtd"], y=tg["Gênero"], orientation="h",
+                        marker=dict(color=tg["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=tg["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=260,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.4))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with p3:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Tipo de Moradia</div>'
+                            '<div class="chart-sub">Casa vs Apartamento</div>',
+                            unsafe_allow_html=True)
+                if COMP_COL:
+                    def _moradia(v):
+                        v = str(v).upper()
+                        if "APAR" in v or "APT" in v: return "Apartamento"
+                        if "CASA" in v: return "Casa"
+                        return "Outro"
+                    tm = df[COMP_COL].apply(_moradia).value_counts().reset_index()
+                    tm.columns = ["Moradia", "Qtd"]; tm = tm.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=tm["Qtd"], y=tm["Moradia"], orientation="h",
+                        marker=dict(color=tm["Qtd"], colorscale=[[0, GREEN],[1, AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=tm["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=260,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.4))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Bairros + Equipes ──────────────────────────────────────────────────
+        section("Análise de Localização e Equipes")
+        la1, la2 = st.columns(2, gap="medium")
+
+        with la1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Top Bairros</div>'
+                            '<div class="chart-sub">Bairros com maior volume de cadastros</div>',
+                            unsafe_allow_html=True)
+                if "BAIRRO" in df.columns:
+                    rb2 = df["BAIRRO"].fillna("Não informado").value_counts().head(15).reset_index()
+                    rb2.columns = ["Bairro", "Qtd"]; rb2 = rb2.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=rb2["Qtd"], y=rb2["Bairro"], orientation="h",
+                        marker=dict(color=rb2["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=rb2["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=400,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=11),
+                        bargap=0.3))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with la2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Performance por Equipe</div>'
+                            '<div class="chart-sub">Cadastros por equipe de campo</div>',
+                            unsafe_allow_html=True)
+                if EQUIPE_COL:
+                    re2 = df[EQUIPE_COL].fillna("Não informado").value_counts().head(15).reset_index()
+                    re2.columns = ["Equipe", "Qtd"]; re2 = re2.sort_values("Qtd")
+                    fig = go.Figure(go.Bar(
+                        x=re2["Qtd"], y=re2["Equipe"], orientation="h",
+                        marker=dict(color=re2["Qtd"], colorscale=[[0, GREEN],[1, AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=re2["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig.update_layout(**base_layout(height=400,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.35))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Métricas detalhadas ────────────────────────────────────────────────
+        section("Métricas Detalhadas")
+        md1, md2 = st.columns(2, gap="medium")
+
+        with md1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Bairro</div>',
+                            unsafe_allow_html=True)
+                if "BAIRRO" in df.columns:
+                    tb = df["BAIRRO"].fillna("Não informado").value_counts().reset_index()
+                    tb.columns = ["Bairro", "Leads"]
+                    tb["% Total"] = (tb["Leads"] / total_bf * 100).round(1).astype(str) + "%"
+                    st.dataframe(tb, use_container_width=True, hide_index=True, height=340)
+
+        with md2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title" style="margin-bottom:12px">Por Equipe</div>',
+                            unsafe_allow_html=True)
+                if EQUIPE_COL:
+                    te = df[EQUIPE_COL].fillna("Não informado").value_counts().reset_index()
+                    te.columns = ["Equipe", "Leads"]
+                    te["% Total"] = (te["Leads"] / total_bf * 100).round(1).astype(str) + "%"
+                    st.dataframe(te, use_container_width=True, hide_index=True, height=340)
+
+    with tab_bf_cad:
+        sc, cc = st.columns([4, 1])
+        bf_search = sc.text_input("", placeholder="🔍  Buscar por nome, bairro, pet, equipe...",
+                                  label_visibility="collapsed")
+        cc.markdown(f'<p style="color:{MUTED2};font-size:12px;text-align:right;padding-top:10px">'
+                    f'{fmt_num(total_bf)} registros</p>', unsafe_allow_html=True)
+        df_bf = df.copy()
+        if bf_search:
+            bf_cols = ["NOME_COMPLETO", "BAIRRO", PET_COL, NOME_PET, EQUIPE_COL, ASSE_COL, "CEP"]
+            bf_mask = pd.Series(False, index=df_bf.index)
+            for c in bf_cols:
+                if c and c in df_bf.columns:
+                    bf_mask |= df_bf[c].astype(str).str.contains(bf_search, case=False, na=False)
+            df_bf = df_bf[bf_mask]
+        pref = ["DATA","NOME_COMPLETO","WHATSAPP",PET_COL,NOME_PET,GEN_COL,IDADE_COL,
+                "BAIRRO","CEP","ENDERECO","COMPLEMENTO",EQUIPE_COL,ASSE_COL]
+        bf_show = [c for c in pref if c and c in df_bf.columns]
+        st.dataframe(df_bf[bf_show], use_container_width=True, hide_index=True, height=580)
+
+    st.stop()   # buffo complete
 
 # ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:

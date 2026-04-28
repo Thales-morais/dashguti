@@ -2111,6 +2111,12 @@ if tipo == "visita":
                              badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
                     unsafe_allow_html=True)
 
+        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+        k5, _, _, _ = st.columns(4, gap="medium")
+        k5.markdown(kpi_card(PURPLE, "QR Code Capturado", "177",
+                             badge="total de capturas via QR", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+
         if df.empty:
             st.info("Nenhuma visita no período selecionado."); st.stop()
 

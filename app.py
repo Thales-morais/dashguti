@@ -457,6 +457,43 @@ def load_buffo() -> pd.DataFrame:
         df = df.rename(columns={comp_col: "COMPLEMENTO"})
     return df
 
+@st.cache_data(ttl=20)
+def load_andreia_castracao() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/base_andreia_castracao?select=*&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    def _norm(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
+        return re.sub(r"[^\w]+", "_", c.strip()).upper().strip("_")
+    df.columns = [_norm(c) for c in df.columns]
+    date_col = next((c for c in df.columns if "CRIADO" in c or "DATA" in c or "DATE" in c or "CREATED" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
+    if "BAIRRO" in df.columns:
+        df["BAIRRO"] = df["BAIRRO"].str.upper().str.strip()
+    # normaliza especie
+    esp_col = next((c for c in df.columns if "ESPECIE" in c or "ESPÉC" in c), None)
+    if esp_col and esp_col != "ESPECIE": df = df.rename(columns={esp_col: "ESPECIE"})
+    if "ESPECIE" in df.columns: df["ESPECIE"] = df["ESPECIE"].str.upper().str.strip()
+    # normaliza genero
+    if "GENERO" in df.columns: df["GENERO"] = df["GENERO"].str.capitalize().str.strip()
+    # normaliza porte
+    if "PORTE" in df.columns: df["PORTE"] = df["PORTE"].str.capitalize().str.strip()
+    col_num = next((c for c in df.columns if c in ("N_", "N", "NUM", "NUMERO")), None)
+    if col_num and col_num != "NUM": df = df.rename(columns={col_num: "NUM"})
+    return df
+
 
 # ── charts ────────────────────────────────────────────────────────────────────
 def base_layout(**kw):
@@ -788,6 +825,12 @@ with st.sidebar:
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
 
+    # Filtro de base — aba Andreia tem duas bases distintas
+    andreia_proj = None
+    if pagina_cfg.get("tipo") == "andreia":
+        andreia_proj = st.selectbox("PROJETO", ["Base Protetores", "Base Castração"], index=0)
+        st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+
     # Filtro de projeto — só na aba Geral (tipo leads com múltiplos projetos)
     if pagina_cfg.get("tipo") == "leads":
         projs = pagina_cfg["projetos"]
@@ -830,7 +873,9 @@ elif tipo == "zona_eleitoral":
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 elif tipo == "andreia":
     with st.spinner(""):
-        try:    df_all = load_andreia(); erro = None
+        try:
+            df_all = load_andreia_castracao() if andreia_proj == "Base Castração" else load_andreia()
+            erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 elif tipo == "buffo":
     with st.spinner(""):
@@ -1158,15 +1203,22 @@ if tipo == "zona_eleitoral":
 
 # ══════════════════════════ LATIDAH ANDREIA ═══════════════════════════════════
 if tipo == "andreia":
-    BAIRRO_COL = next((c for c in df.columns if "BAIRRO" in c), "BAIRRO")
-    CEP_COL    = next((c for c in df.columns if "CEP"    in c), "CEP")
+    is_castracao = (andreia_proj == "Base Castração")
+    BAIRRO_COL = next((c for c in df.columns if "BAIRRO"    in c), "BAIRRO")
+    CEP_COL    = next((c for c in df.columns if "CEP"       in c), "CEP")
     TIPO_COL   = next((c for c in df.columns if c == "TIPO"), "TIPO")
-    LOG_COL    = next((c for c in df.columns if "LOGRADOURO" in c), "LOGRADOURO")
+    LOG_COL    = next((c for c in df.columns if "LOGRADOURO" in c or "LOGRADO" in c), "LOGRADOURO")
+    # colunas exclusivas da base castração
+    ESP_COL    = "ESPECIE"   if "ESPECIE"   in df.columns else None
+    GEN_AN_COL = "GENERO"    if "GENERO"    in df.columns else None
+    PRT_COL    = "PORTE"     if "PORTE"     in df.columns else None
+    NOME_AN_COL= next((c for c in df.columns if "NOME" in c and "ANIMAL" in c), None)
+    PEL_COL    = next((c for c in df.columns if "PELAGEM" in c or "COR" in c), None)
 
-    total_an   = len(df)
-    n_bairros  = df[BAIRRO_COL].nunique() if BAIRRO_COL in df.columns else 0
-    n_ceps     = df[CEP_COL].nunique()    if CEP_COL    in df.columns else 0
-    n_tipos    = df[TIPO_COL].nunique()   if TIPO_COL   in df.columns else 0
+    total_an  = len(df)
+    n_bairros = df[BAIRRO_COL].nunique() if BAIRRO_COL in df.columns else 0
+    n_ceps    = df[CEP_COL].nunique()    if CEP_COL    in df.columns else 0
+    n_especies= df[ESP_COL].nunique()    if ESP_COL                  else 0
 
     with tab_an_vis:
         # ── KPIs ──────────────────────────────────────────────────────────────
@@ -1180,14 +1232,20 @@ if tipo == "andreia":
         k3.markdown(kpi_card(GREEN, "CEPs", fmt_num(n_ceps),
                              badge="regiões distintas", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
                     unsafe_allow_html=True)
-        k4.markdown(kpi_card(AMBER, "Tipos", fmt_num(n_tipos),
-                             badge="tipos de logradouro", badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
-                    unsafe_allow_html=True)
+        if is_castracao and ESP_COL:
+            k4.markdown(kpi_card(AMBER, "Espécies", fmt_num(n_especies),
+                                 badge="felina / canina", badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                        unsafe_allow_html=True)
+        else:
+            n_tipos = df[TIPO_COL].nunique() if TIPO_COL in df.columns else 0
+            k4.markdown(kpi_card(AMBER, "Tipos", fmt_num(n_tipos),
+                                 badge="tipos de logradouro", badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                        unsafe_allow_html=True)
 
         if df.empty:
             st.info("Nenhum contato encontrado."); st.stop()
 
-        # ── Mapa por Bairro ────────────────────────────────────────────────────
+        # ── Mapa por Bairro ───────────────────────────────────────────────────
         section("Distribuição Geográfica")
         mfig_an = map_bairro(df, col=BAIRRO_COL, label="leads", height=460)
         if mfig_an:
@@ -1213,7 +1271,7 @@ if tipo == "andreia":
                     bargap=0.3))
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        # ── Ranking de Bairros + Tipo de Logradouro ────────────────────────────
+        # ── Análise de Localização ─────────────────────────────────────────────
         section("Análise de Localização")
         col_a, col_b = st.columns(2, gap="medium")
 
@@ -1258,6 +1316,74 @@ if tipo == "andreia":
                         yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
                         bargap=0.35))
                     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Perfil dos Pets (exclusivo Base Castração) ─────────────────────────
+        if is_castracao:
+            section("Perfil dos Pets")
+            pa, pb, pc = st.columns(3, gap="medium")
+
+            with pa:
+                with st.container(border=True):
+                    st.markdown('<div class="chart-title">Espécie</div>'
+                                '<div class="chart-sub">Felina vs Canina</div>',
+                                unsafe_allow_html=True)
+                    if ESP_COL:
+                        te = df[ESP_COL].fillna("Não informado").value_counts().reset_index()
+                        te.columns = ["Espécie", "Qtd"]; te = te.sort_values("Qtd")
+                        fig = go.Figure(go.Bar(
+                            x=te["Qtd"], y=te["Espécie"], orientation="h",
+                            marker=dict(color=[ORANGE if "CAN" in str(v) else PURPLE
+                                               for v in te["Espécie"]], line=dict(width=0)),
+                            text=te["Qtd"], textposition="outside",
+                            textfont=dict(color=MUTED2, size=11),
+                        ))
+                        fig.update_layout(**base_layout(height=240,
+                            xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                            yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                            bargap=0.4))
+                        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            with pb:
+                with st.container(border=True):
+                    st.markdown('<div class="chart-title">Gênero</div>'
+                                '<div class="chart-sub">Macho vs Fêmea</div>',
+                                unsafe_allow_html=True)
+                    if GEN_AN_COL:
+                        tg = df[GEN_AN_COL].fillna("Não informado").value_counts().reset_index()
+                        tg.columns = ["Gênero", "Qtd"]; tg = tg.sort_values("Qtd")
+                        fig = go.Figure(go.Bar(
+                            x=tg["Qtd"], y=tg["Gênero"], orientation="h",
+                            marker=dict(color=tg["Qtd"], colorscale=[[0, GREEN],[1, AMBER]],
+                                        showscale=False, line=dict(width=0)),
+                            text=tg["Qtd"], textposition="outside",
+                            textfont=dict(color=MUTED2, size=11),
+                        ))
+                        fig.update_layout(**base_layout(height=240,
+                            xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                            yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                            bargap=0.4))
+                        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            with pc:
+                with st.container(border=True):
+                    st.markdown('<div class="chart-title">Porte</div>'
+                                '<div class="chart-sub">Pequeno / Médio / Grande</div>',
+                                unsafe_allow_html=True)
+                    if PRT_COL:
+                        tp = df[PRT_COL].fillna("Não informado").value_counts().reset_index()
+                        tp.columns = ["Porte", "Qtd"]; tp = tp.sort_values("Qtd")
+                        fig = go.Figure(go.Bar(
+                            x=tp["Qtd"], y=tp["Porte"], orientation="h",
+                            marker=dict(color=tp["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                        showscale=False, line=dict(width=0)),
+                            text=tp["Qtd"], textposition="outside",
+                            textfont=dict(color=MUTED2, size=11),
+                        ))
+                        fig.update_layout(**base_layout(height=240,
+                            xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                            yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                            bargap=0.4))
+                        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         # ── Top Logradouros ────────────────────────────────────────────────────
         section("Top Logradouros")
@@ -1313,15 +1439,16 @@ if tipo == "andreia":
                     f'{fmt_num(total_an)} registros</p>', unsafe_allow_html=True)
         df_an = df.copy()
         if an_search:
-            an_cols = ["NOME", BAIRRO_COL, CEP_COL, LOG_COL, "TELEFONE", "CELULAR"]
+            an_cols = ["NOME", BAIRRO_COL, CEP_COL, LOG_COL, "TELEFONE", "CELULAR",
+                       ESP_COL, NOME_AN_COL]
             an_mask = pd.Series(False, index=df_an.index)
             for c in an_cols:
-                if c in df_an.columns:
+                if c and c in df_an.columns:
                     an_mask |= df_an[c].astype(str).str.contains(an_search, case=False, na=False)
             df_an = df_an[an_mask]
-        an_show = [c for c in ["NOME", "TELEFONE", "CELULAR", BAIRRO_COL, CEP_COL,
-                                TIPO_COL, LOG_COL, "NUM", "RG", "CPF"]
-                   if c in df_an.columns]
+        base_cols = ["NOME", "TELEFONE", "CELULAR", BAIRRO_COL, CEP_COL, TIPO_COL, LOG_COL, "NUM", "RG", "CPF"]
+        pet_cols  = [NOME_AN_COL, ESP_COL, GEN_AN_COL, PRT_COL, PEL_COL] if is_castracao else []
+        an_show = [c for c in base_cols + pet_cols if c and c in df_an.columns]
         st.dataframe(df_an[an_show], use_container_width=True, hide_index=True, height=560)
 
     st.stop()   # andreia complete

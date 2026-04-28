@@ -817,6 +817,7 @@ def map_municipio(df, col="MUNICIPIO", label="cadastros", height=380):
 # Páginas disponíveis — adicione novas entradas aqui conforme criar tabelas no Supabase
 # formato: "Label no menu": {"tabelas": [...], "descricao": "..."}
 PAGINAS = {
+    "🏠  Geral": {"tipo": "geral"},
     "📣  Campanhas": {
         "tipo": "leads",
         "projetos": PROJETOS,
@@ -922,6 +923,19 @@ elif tipo == "visita":
     with st.spinner(""):
         try:    df_all = load_guti_visita(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "geral":
+    _g_campanhas = _g_reinoh = _g_ze = _g_andreia = _g_cast = _g_buffo = _g_visita = pd.DataFrame()
+    with st.spinner("Carregando todos os projetos…"):
+        try:
+            _g_campanhas = load_leads(tuple(PROJETOS.keys()), tuple(PROJETOS.items()))
+            _g_reinoh    = load_reinoh()
+            _g_ze        = load_zona_eleitoral()
+            _g_andreia   = load_andreia()
+            _g_cast      = load_andreia_castracao()
+            _g_buffo     = load_buffo()
+            _g_visita    = load_guti_visita()
+            df_all = pd.DataFrame(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
     with st.spinner(""):
         try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
@@ -954,8 +968,197 @@ elif tipo == "buffo":
     tab_bf_vis, tab_bf_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
 elif tipo == "visita":
     tab_vs_vis, tab_vs_lista = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
+elif tipo == "geral":
+    tab_g_vis, tab_g_det = st.tabs(["  📊  Consolidado  ","  📋  Últimas Atividades  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
+
+# ════════════════════════════════ GERAL ══════════════════════════════════════
+if tipo == "geral":
+    def _flt_g(dff):
+        if "DATA" in dff.columns and not dff.empty and periodo != "Total":
+            m = (dff["DATA"].dt.date >= data_ini) & (dff["DATA"].dt.date <= data_fim)
+            return dff[m].copy()
+        return dff.copy()
+
+    g_camp  = _flt_g(_g_campanhas)
+    g_rei   = _flt_g(_g_reinoh)
+    g_ze    = _flt_g(_g_ze)
+    g_and   = _flt_g(_g_andreia)
+    g_cast  = _flt_g(_g_cast)
+    g_buf   = _flt_g(_g_buffo)
+    g_vis   = _flt_g(_g_visita)
+
+    n_camp = len(g_camp)
+    n_rei  = len(g_rei)
+    n_ze   = len(g_ze)
+    n_and  = len(g_and) + len(g_cast)
+    n_buf  = len(g_buf)
+    n_vis  = len(g_vis)
+    total_g = n_camp + n_rei + n_ze + n_and + n_buf + n_vis
+
+    hoje_g = datetime.now(tz=BRASILIA).date()
+    hoje_count = sum(
+        int((d["DATA"].dt.date == hoje_g).sum()) if "DATA" in d.columns and not d.empty else 0
+        for d in [_g_campanhas, _g_reinoh, _g_ze, _g_andreia, _g_cast, _g_buffo, _g_visita]
+    )
+    d7_count = sum(
+        int((d["DATA"].dt.date >= hoje_g - timedelta(7)).sum()) if "DATA" in d.columns and not d.empty else 0
+        for d in [_g_campanhas, _g_reinoh, _g_ze, _g_andreia, _g_cast, _g_buffo, _g_visita]
+    )
+
+    with tab_g_vis:
+        # ── KPIs Linha 1 ─────────────────────────────────────────────────
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total Geral", fmt_num(total_g),
+                             badge=f"todos os projetos · {periodo}",
+                             badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Campanhas", fmt_num(n_camp),
+                             badge="Trampah · Latidah · Vigilha",
+                             badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "Latidah Andreia", fmt_num(n_and),
+                             badge="protetores + castração",
+                             badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER, "Latidah Buffo", fmt_num(n_buf),
+                             badge="cadastros de pets",
+                             badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        # ── KPIs Linha 2 ─────────────────────────────────────────────────
+        k5, k6, k7, k8 = st.columns(4, gap="medium")
+        k5.markdown(kpi_card(PURPLE, "Reinoh", fmt_num(n_rei),
+                             badge="base de apoiadores",
+                             badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k6.markdown(kpi_card(ORANGE, "Zona Eleitoral", fmt_num(n_ze),
+                             badge="leads por zona",
+                             badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k7.markdown(kpi_card(GREEN, "Guti Visita", fmt_num(n_vis),
+                             badge="visitas registradas",
+                             badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k8.markdown(kpi_card(AMBER, "Hoje", fmt_num(hoje_count),
+                             badge=f"últimos 7 dias: {fmt_num(d7_count)}",
+                             badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        # ── Distribuição por Base ─────────────────────────────────────────
+        section("Distribuição por Base")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Volume por projeto</div>'
+                        '<div class="chart-sub">Total de registros no período selecionado</div>',
+                        unsafe_allow_html=True)
+            dist_df = pd.DataFrame([
+                ("Campanhas",       n_camp, ORANGE),
+                ("Latidah Andreia", n_and,  GREEN),
+                ("Latidah Buffo",   n_buf,  AMBER),
+                ("Reinoh",          n_rei,  PURPLE),
+                ("Zona Eleitoral",  n_ze,   "#06b6d4"),
+                ("Guti Visita",     n_vis,  "#ec4899"),
+            ], columns=["Base", "Total", "Cor"]).sort_values("Total")
+            fig_dist = go.Figure(go.Bar(
+                x=dist_df["Total"], y=dist_df["Base"], orientation="h",
+                marker=dict(color=dist_df["Cor"].tolist(), line=dict(width=0)),
+                text=dist_df["Total"].apply(lambda v: fmt_num(int(v))),
+                textposition="outside",
+                textfont=dict(color=MUTED2, size=11),
+            ))
+            fig_dist.update_layout(**base_layout(height=300,
+                xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=13),
+                bargap=0.35,
+            ))
+            st.plotly_chart(fig_dist, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Crescimento ───────────────────────────────────────────────────
+        section("Crescimento no Período")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Novos registros por dia — todos os projetos</div>'
+                        '<div class="chart-sub">Evolução diária de cada base no período selecionado</div>',
+                        unsafe_allow_html=True)
+
+            def _daily_g(dff, label):
+                if "DATA" not in dff.columns or dff.empty:
+                    return pd.DataFrame(columns=["dia", label])
+                d = dff.dropna(subset=["DATA"]).copy()
+                d["dia"] = d["DATA"].dt.date
+                return d.groupby("dia").size().reset_index(name=label)
+
+            bases_lines = [
+                ("Campanhas",       g_camp,  ORANGE),
+                ("Latidah Andreia", pd.concat([g_and, g_cast], ignore_index=True), GREEN),
+                ("Latidah Buffo",   g_buf,   AMBER),
+                ("Reinoh",          g_rei,   PURPLE),
+                ("Zona Eleitoral",  g_ze,    "#06b6d4"),
+                ("Guti Visita",     g_vis,   "#ec4899"),
+            ]
+            fig_lines = go.Figure()
+            has_line = False
+            for nome, dff, color in bases_lines:
+                daily = _daily_g(dff, nome)
+                if not daily.empty:
+                    has_line = True
+                    fig_lines.add_trace(go.Scatter(
+                        x=daily["dia"], y=daily[nome],
+                        mode="lines", name=nome,
+                        line=dict(color=color, width=2, shape="spline", smoothing=0.6),
+                        hovertemplate=f"<b>%{{y}} {nome}</b><br>%{{x}}<extra></extra>",
+                    ))
+            if has_line:
+                fig_lines.update_layout(**base_layout(height=320,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, tickformat="%d/%m",
+                               tickfont_size=11, zeroline=False),
+                    yaxis=dict(gridcolor=GRID_CLR, showline=False, tickfont_size=11, zeroline=False),
+                    hovermode="x unified",
+                    legend=dict(orientation="h", y=1.1, x=0, font=dict(size=11)),
+                    showlegend=True,
+                ))
+                st.plotly_chart(fig_lines, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("Sem dados com data no período selecionado.")
+
+    with tab_g_det:
+        section("Últimas Atividades")
+        ativ_frames = []
+        for nome_base, dff in [
+            ("Campanhas",         g_camp),
+            ("Reinoh",            g_rei),
+            ("Zona Eleitoral",    g_ze),
+            ("Latidah Andreia",   g_and),
+            ("Latidah Castração", g_cast),
+            ("Latidah Buffo",     g_buf),
+            ("Guti Visita",       g_vis),
+        ]:
+            if dff.empty: continue
+            tmp = pd.DataFrame()
+            tmp["DATA"]     = dff["DATA"]     if "DATA"     in dff.columns else pd.NaT
+            tmp["NOME"]     = dff["NOME"].fillna("—")     if "NOME"     in dff.columns else "—"
+            tmp["TELEFONE"] = dff["TELEFONE"].fillna("—") if "TELEFONE" in dff.columns else "—"
+            tmp["BASE"]     = nome_base
+            ativ_frames.append(tmp)
+
+        if ativ_frames:
+            ativ_df = pd.concat(ativ_frames, ignore_index=True)
+            ativ_df = ativ_df.sort_values("DATA", ascending=False, na_position="last")
+            ativ_df["DATA"] = pd.to_datetime(ativ_df["DATA"]).dt.strftime("%d/%m/%Y %H:%M")
+            st.dataframe(
+                ativ_df[["DATA", "BASE", "NOME", "TELEFONE"]].head(300).reset_index(drop=True),
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "DATA":      st.column_config.TextColumn("Data",     width=145),
+                    "BASE":      st.column_config.TextColumn("Projeto",  width=165),
+                    "NOME":      st.column_config.TextColumn("Nome",     width=220),
+                    "TELEFONE":  st.column_config.TextColumn("Telefone", width=145),
+                },
+            )
+        else:
+            st.info("Nenhum registro no período selecionado.")
+
+    st.stop()   # geral complete
 
 # ═══════════════════════════════ REINOH ══════════════════════════════════════
 if tipo == "reinoh":

@@ -1028,6 +1028,7 @@ if tipo == "geral":
                     unsafe_allow_html=True)
 
         # ── KPIs Linha 2 ─────────────────────────────────────────────────
+        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
         k5, k6, k7, k8 = st.columns(4, gap="medium")
         k5.markdown(kpi_card(PURPLE, "Reinoh", fmt_num(n_rei),
                              badge="base de apoiadores",

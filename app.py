@@ -1124,6 +1124,125 @@ if tipo == "geral":
             else:
                 st.info("Sem dados com data no período selecionado.")
 
+        # ── Mapa Consolidado ──────────────────────────────────────────────
+        section("Mapa Consolidado")
+        mapa_modo = st.radio(
+            "", ["🗺️  Estado (SP)", "🏘️  Bairros (Guarulhos)"],
+            horizontal=True, label_visibility="collapsed",
+        )
+
+        if mapa_modo == "🗺️  Estado (SP)":
+            # Campanhas → DDD, Reinoh → MUNICIPIO, Zona Eleitoral → CIDADE
+            fig_m = go.Figure()
+
+            # Campanhas por DDD
+            if "DDD" in g_camp.columns and not g_camp.empty:
+                cnt = g_camp["DDD"].value_counts().reset_index()
+                cnt.columns = ["DDD", "n"]
+                rows_c = [{"lat": DDD_INFO[r.DDD]["lat"], "lon": DDD_INFO[r.DDD]["lon"],
+                           "cidade": DDD_INFO[r.DDD]["cidade"], "n": int(r.n)}
+                          for _, r in cnt.iterrows() if r.DDD in DDD_INFO]
+                if rows_c:
+                    mc = pd.DataFrame(rows_c); mx = mc["n"].max()
+                    fig_m.add_trace(go.Scattermapbox(
+                        lat=mc["lat"], lon=mc["lon"], mode="markers", name="Campanhas",
+                        marker=dict(size=mc["n"] / mx * 50 + 12, color=ORANGE, opacity=0.82, sizemode="diameter"),
+                        text=mc.apply(lambda r: f"<b>Campanhas</b><br>{r['cidade']}<br>{fmt_num(r['n'])} leads", axis=1),
+                        hoverinfo="text",
+                    ))
+
+            # Reinoh por Município
+            if "MUNICIPIO" in g_rei.columns and not g_rei.empty:
+                cnt = g_rei["MUNICIPIO"].str.upper().str.strip().value_counts().reset_index()
+                cnt.columns = ["MUN", "n"]
+                rows_r = []
+                for _, r in cnt.iterrows():
+                    coords = municipio_key(r.MUN)
+                    if coords:
+                        rows_r.append({"lat": coords["lat"], "lon": coords["lon"], "mun": r.MUN, "n": int(r.n)})
+                if rows_r:
+                    mr = pd.DataFrame(rows_r); mx = mr["n"].max()
+                    fig_m.add_trace(go.Scattermapbox(
+                        lat=mr["lat"], lon=mr["lon"], mode="markers", name="Reinoh",
+                        marker=dict(size=mr["n"] / mx * 50 + 12, color=PURPLE, opacity=0.82, sizemode="diameter"),
+                        text=mr.apply(lambda r: f"<b>Reinoh</b><br>{r['mun']}<br>{fmt_num(r['n'])} cadastros", axis=1),
+                        hoverinfo="text",
+                    ))
+
+            # Zona Eleitoral por Cidade
+            cidade_col_ze = next((c for c in g_ze.columns if c == "CIDADE" or "CIDAD" in c), None)
+            if cidade_col_ze and not g_ze.empty:
+                cnt = g_ze[cidade_col_ze].str.upper().str.strip().value_counts().reset_index()
+                cnt.columns = ["CID", "n"]
+                rows_z = []
+                for _, r in cnt.iterrows():
+                    coords = municipio_key(r.CID)
+                    if coords:
+                        rows_z.append({"lat": coords["lat"], "lon": coords["lon"], "cid": r.CID, "n": int(r.n)})
+                if rows_z:
+                    mz = pd.DataFrame(rows_z); mx = mz["n"].max()
+                    fig_m.add_trace(go.Scattermapbox(
+                        lat=mz["lat"], lon=mz["lon"], mode="markers", name="Zona Eleitoral",
+                        marker=dict(size=mz["n"] / mx * 50 + 12, color="#06b6d4", opacity=0.82, sizemode="diameter"),
+                        text=mz.apply(lambda r: f"<b>Zona Eleitoral</b><br>{r['cid']}<br>{fmt_num(r['n'])} leads", axis=1),
+                        hoverinfo="text",
+                    ))
+
+            if fig_m.data:
+                fig_m.update_layout(
+                    mapbox=dict(style=MAP_STYLE, center={"lat": -22.5, "lon": -48.5}, zoom=5.8,
+                                layers=_sp_layer()),
+                    **base_layout(height=480),
+                    showlegend=True,
+                    legend=dict(orientation="h", y=1.05, x=0, font=dict(size=12),
+                                bgcolor="rgba(0,0,0,0)"),
+                )
+                st.plotly_chart(fig_m, use_container_width=True,
+                                config={"displayModeBar": False, "scrollZoom": True})
+            else:
+                st.info("Sem dados geográficos para exibir no período.")
+
+        else:  # Bairros
+            fig_b = go.Figure()
+            for nome_b, dff_b, cor_b in [
+                ("Latidah Andreia", pd.concat([g_and, g_cast], ignore_index=True), GREEN),
+                ("Latidah Buffo",   g_buf, AMBER),
+            ]:
+                bairro_col = next((c for c in dff_b.columns if c == "BAIRRO"), None)
+                if not bairro_col or dff_b.empty:
+                    continue
+                cnt = dff_b[bairro_col].value_counts().reset_index()
+                cnt.columns = ["BAIRRO", "n"]
+                rows_b = []
+                for _, r in cnt.iterrows():
+                    coords = bairro_key(str(r.BAIRRO))
+                    if coords:
+                        rows_b.append({"lat": coords["lat"], "lon": coords["lon"],
+                                       "bairro": r.BAIRRO, "n": int(r.n)})
+                if not rows_b:
+                    continue
+                mb = pd.DataFrame(rows_b); mx = mb["n"].max()
+                fig_b.add_trace(go.Scattermapbox(
+                    lat=mb["lat"], lon=mb["lon"], mode="markers", name=nome_b,
+                    marker=dict(size=mb["n"] / mx * 44 + 12, color=cor_b, opacity=0.85, sizemode="diameter"),
+                    text=mb.apply(lambda r: f"<b>{nome_b}</b><br>{r['bairro']}<br>{fmt_num(r['n'])} leads", axis=1),
+                    hoverinfo="text",
+                ))
+
+            if fig_b.data:
+                fig_b.update_layout(
+                    mapbox=dict(style=MAP_STYLE, center={"lat": -23.460, "lon": -46.510}, zoom=11.5,
+                                layers=_sp_layer()),
+                    **base_layout(height=480),
+                    showlegend=True,
+                    legend=dict(orientation="h", y=1.05, x=0, font=dict(size=12),
+                                bgcolor="rgba(0,0,0,0)"),
+                )
+                st.plotly_chart(fig_b, use_container_width=True,
+                                config={"displayModeBar": False, "scrollZoom": True})
+            else:
+                st.info("Sem dados de bairro para exibir no período.")
+
     with tab_g_det:
         section("Últimas Atividades")
         ativ_frames = []

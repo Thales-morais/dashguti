@@ -1288,6 +1288,19 @@ if tipo == "andreia":
         if df.empty:
             st.info("Nenhum contato encontrado."); st.stop()
 
+        # ── Engajamento no Bot ────────────────────────────────────────────────
+        section("Engajamento no Bot")
+        b1, b2, b3 = st.columns(3, gap="medium")
+        b1.markdown(kpi_card(PURPLE, "Taxa de Resposta", "56%",
+                             badge="leads que responderam ao bot", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        b2.markdown(kpi_card(ORANGE, "2+ Interações", "40%",
+                             badge="interagiram mais de 2x com o bot", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        b3.markdown(kpi_card(GREEN, "3+ Respostas", "30%",
+                             badge="responderam 3 ou mais vezes", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+
         # ── Mapa por Bairro ───────────────────────────────────────────────────
         section("Distribuição Geográfica")
         mfig_an = map_bairro(df, col=BAIRRO_COL, label="leads", height=460)
@@ -1539,6 +1552,19 @@ if tipo == "buffo":
 
         if df.empty:
             st.info("Nenhum cadastro no período selecionado."); st.stop()
+
+        # ── Engajamento no Bot ────────────────────────────────────────────────
+        section("Engajamento no Bot")
+        b1, b2, b3 = st.columns(3, gap="medium")
+        b1.markdown(kpi_card(PURPLE, "Taxa de Resposta", "56%",
+                             badge="leads que responderam ao bot", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        b2.markdown(kpi_card(ORANGE, "2+ Interações", "40%",
+                             badge="interagiram mais de 2x com o bot", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        b3.markdown(kpi_card(GREEN, "3+ Respostas", "30%",
+                             badge="responderam 3 ou mais vezes", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
 
         # ── Crescimento ────────────────────────────────────────────────────────
         if "DATA" in df.columns:

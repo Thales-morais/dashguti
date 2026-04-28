@@ -494,6 +494,39 @@ def load_andreia_castracao() -> pd.DataFrame:
     if col_num and col_num != "NUM": df = df.rename(columns={col_num: "NUM"})
     return df
 
+@st.cache_data(ttl=20)
+def load_guti_visita() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/lead_guti_visita?select=*&order=data.desc&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    def _norm(c):
+        c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
+        return re.sub(r"[^\w]+", "_", c.strip()).upper().strip("_")
+    df.columns = [_norm(c) for c in df.columns]
+    date_col = next((c for c in df.columns if c == "DATA" or "DATA" in c or "DATE" in c), None)
+    if date_col:
+        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
+                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        df = df.sort_values("DATA", ascending=False, na_position="last")
+    # consolida nome
+    if "NAME" in df.columns:
+        df["NOME"] = df["NAME"].str.strip()
+    elif "FIRST_NAME" in df.columns:
+        df["NOME"] = (df["FIRST_NAME"].fillna("") + " " + df.get("LAST_NAME", pd.Series("", index=df.index)).fillna("")).str.strip()
+    # normaliza telefone
+    if "PHONE" in df.columns and "TELEFONE" not in df.columns:
+        df = df.rename(columns={"PHONE": "TELEFONE"})
+    return df
+
 
 # ── charts ────────────────────────────────────────────────────────────────────
 def base_layout(**kw):
@@ -804,6 +837,10 @@ PAGINAS = {
         "tipo": "buffo",
         "tabela": "base_buffo",
     },
+    "📍  Guti Visita": {
+        "tipo": "visita",
+        "tabela": "lead_guti_visita",
+    },
 }
 
 with st.sidebar:
@@ -881,6 +918,10 @@ elif tipo == "buffo":
     with st.spinner(""):
         try:    df_all = load_buffo(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "visita":
+    with st.spinner(""):
+        try:    df_all = load_guti_visita(); erro = None
+        except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
     with st.spinner(""):
         try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
@@ -911,6 +952,8 @@ elif tipo == "andreia":
     tab_an_vis, tab_an_cont = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
 elif tipo == "buffo":
     tab_bf_vis, tab_bf_cad = st.tabs(["  📊  Visão Geral  ","  📋  Cadastros  "])
+elif tipo == "visita":
+    tab_vs_vis, tab_vs_lista = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -1692,6 +1735,126 @@ if tipo == "buffo":
         st.dataframe(df_bf[bf_show], use_container_width=True, hide_index=True, height=580)
 
     st.stop()   # buffo complete
+
+# ══════════════════════════════ GUTI VISITA ═══════════════════════════════════
+if tipo == "visita":
+    total_vs = len(df)
+    hoje_vs  = len(df[df["DATA"].dt.date == datetime.now(tz=BRASILIA).date()]) if "DATA" in df.columns else 0
+    ultimos7 = len(df[df["DATA"].dt.date >= (datetime.now(tz=BRASILIA).date() - timedelta(7))]) if "DATA" in df.columns else 0
+    com_tel  = df["TELEFONE"].notna().sum() if "TELEFONE" in df.columns else 0
+
+    with tab_vs_vis:
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total de Visitas", fmt_num(total_vs),
+                             badge=f"Período: {periodo}", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Hoje", fmt_num(hoje_vs),
+                             badge="novos hoje", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "Últimos 7 dias", fmt_num(ultimos7),
+                             badge="visitas recentes", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER, "Com Telefone", fmt_num(com_tel),
+                             badge=f"{int(com_tel/total_vs*100) if total_vs else 0}% dos contatos",
+                             badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        if df.empty:
+            st.info("Nenhuma visita no período selecionado."); st.stop()
+
+        # ── Crescimento ────────────────────────────────────────────────────────
+        section("Crescimento")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Visitas por dia</div>'
+                        '<div class="chart-sub">Evolução no período selecionado</div>',
+                        unsafe_allow_html=True)
+            st.plotly_chart(area_chart(df), use_container_width=True, config={"displayModeBar": False})
+
+        # ── Distribuição por hora e dia da semana ─────────────────────────────
+        section("Padrão de Visitas")
+        h1, h2 = st.columns(2, gap="medium")
+
+        with h1:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Visitas por Hora do Dia</div>'
+                            '<div class="chart-sub">Em que horário as pessoas se cadastram</div>',
+                            unsafe_allow_html=True)
+                if "DATA" in df.columns:
+                    hora_df = df.dropna(subset=["DATA"]).copy()
+                    hora_df["hora"] = hora_df["DATA"].dt.hour
+                    hc = hora_df.groupby("hora").size().reset_index(name="Qtd")
+                    hc["label"] = hc["hora"].apply(lambda h: f"{h:02d}h")
+                    fig = go.Figure(go.Bar(
+                        x=hc["label"], y=hc["Qtd"],
+                        marker=dict(color=hc["Qtd"], colorscale=[[0, PURPLE],[1, ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=hc["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=10),
+                    ))
+                    fig.update_layout(**base_layout(height=300,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        bargap=0.2))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with h2:
+            with st.container(border=True):
+                st.markdown('<div class="chart-title">Visitas por Dia da Semana</div>'
+                            '<div class="chart-sub">Dias com mais cadastros</div>',
+                            unsafe_allow_html=True)
+                if "DATA" in df.columns:
+                    dias_pt = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
+                    sem_df  = df.dropna(subset=["DATA"]).copy()
+                    sem_df["dia_num"] = sem_df["DATA"].dt.dayofweek
+                    sem_df["dia"]     = sem_df["dia_num"].apply(lambda d: dias_pt[d])
+                    sc2 = sem_df.groupby(["dia_num","dia"]).size().reset_index(name="Qtd")
+                    sc2 = sc2.sort_values("dia_num")
+                    fig = go.Figure(go.Bar(
+                        x=sc2["dia"], y=sc2["Qtd"],
+                        marker=dict(color=sc2["Qtd"], colorscale=[[0, GREEN],[1, AMBER]],
+                                    showscale=False, line=dict(width=0)),
+                        text=sc2["Qtd"], textposition="outside",
+                        textfont=dict(color=MUTED2, size=10),
+                    ))
+                    fig.update_layout(**base_layout(height=300,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=11),
+                        yaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        bargap=0.3))
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Tabela resumo por data ─────────────────────────────────────────────
+        section("Resumo Diário")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title" style="margin-bottom:12px">Visitas por Data</div>',
+                        unsafe_allow_html=True)
+            if "DATA" in df.columns:
+                rd = df.dropna(subset=["DATA"]).copy()
+                rd["Data"] = rd["DATA"].dt.date
+                rd = rd.groupby("Data").size().reset_index(name="Visitas")
+                rd = rd.sort_values("Data", ascending=False)
+                rd["Data"] = rd["Data"].astype(str)
+                rd["% Total"] = (rd["Visitas"] / total_vs * 100).round(1).astype(str) + "%"
+                st.dataframe(rd, use_container_width=True, hide_index=True, height=360)
+
+    with tab_vs_lista:
+        sc, cc = st.columns([4, 1])
+        vs_search = sc.text_input("", placeholder="🔍  Buscar por nome ou telefone...",
+                                  label_visibility="collapsed")
+        cc.markdown(f'<p style="color:{MUTED2};font-size:12px;text-align:right;padding-top:10px">'
+                    f'{fmt_num(total_vs)} registros</p>', unsafe_allow_html=True)
+        df_vs = df.copy()
+        if vs_search:
+            vs_mask = pd.Series(False, index=df_vs.index)
+            for c in ["NOME", "TELEFONE", "FIRST_NAME", "LAST_NAME", "NAME"]:
+                if c in df_vs.columns:
+                    vs_mask |= df_vs[c].astype(str).str.contains(vs_search, case=False, na=False)
+            df_vs = df_vs[vs_mask]
+        vs_show = [c for c in ["DATA", "NOME", "TELEFONE", "FIRST_NAME", "LAST_NAME"]
+                   if c in df_vs.columns]
+        st.dataframe(df_vs[vs_show], use_container_width=True, hide_index=True, height=580)
+
+    st.stop()   # visita complete
 
 # ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:

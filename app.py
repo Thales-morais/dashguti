@@ -435,11 +435,13 @@ def load_buffo() -> pd.DataFrame:
         c = unicodedata.normalize("NFKD", str(c)).encode("ascii","ignore").decode("ascii")
         return re.sub(r"[^\w]+", "_", c.strip()).upper().strip("_")
     df.columns = [_norm(c) for c in df.columns]
-    date_col = next((c for c in df.columns if "DATA_HORA" in c or "CREATED" in c), None) \
-               or next((c for c in df.columns if "DATA" in c), None)
+    date_col = "DATA_HORA" if "DATA_HORA" in df.columns else \
+               next((c for c in df.columns if "CREATED" in c or "DATA" in c), None)
     if date_col:
-        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
-                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        ser = pd.to_datetime(df[date_col], errors="coerce")
+        if ser.dt.tz is not None:
+            ser = ser.dt.tz_convert(BRASILIA).dt.tz_localize(None)
+        df["DATA"] = ser
         df = df.sort_values("DATA", ascending=False, na_position="last")
     pet_col = next((c for c in df.columns if "CACHORRO" in c or ("ANIMAL" in c and "NOME" not in c)), None)
     if pet_col:

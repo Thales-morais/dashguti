@@ -817,7 +817,7 @@ def map_municipio(df, col="MUNICIPIO", label="cadastros", height=380):
 # Páginas disponíveis — adicione novas entradas aqui conforme criar tabelas no Supabase
 # formato: "Label no menu": {"tabelas": [...], "descricao": "..."}
 PAGINAS = {
-    "🏠  Geral": {
+    "📣  Campanhas": {
         "tipo": "leads",
         "projetos": PROJETOS,
     },

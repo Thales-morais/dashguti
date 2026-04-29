@@ -209,7 +209,86 @@ RELATORIO_DATA = {
             },
         ],
     },
-    "Latidah": None,   # relatório será adicionado em breve
+    "Latidah": {
+        "projeto": "Base Guti Latidah",
+        "tabela":  "lead_guti_latidah",
+        "semana":  "Semana 29/04/2026",
+        "pct_int":        754 / 1045,
+        "pct_comp":       449 / 1045,
+        "pct_p2_vs_int":  343 / 754,   # condicional
+        "pct_p3_vs_int":  582 / 754,
+        "pct_p4_vs_int":  449 / 754,
+        "funil_steps": [
+            ("Total de Leads",     "total"),
+            ("Responderam P1",     "int"),
+            ("Responderam P3",     "p3"),
+            ("Completos — P4",     "p4"),
+        ],
+        "nota_funil": "P2 é condicional (vínculo com animal): 343 responderam — não integra o funil principal.",
+        "perguntas": [
+            {
+                "titulo": "Pergunta 1 – Situação atual",
+                "pct_base": "int",
+                "opcoes": [
+                    ("A. Tenho um animal e preciso de ajuda",        236/754),
+                    ("B. Vi um animal em situação de risco",          172/754),
+                    ("C. Ajudo animais / sou protetor(a)",           133/754),
+                    ("D. Quero adotar, mas ainda tô entendendo",     111/754),
+                    ("E. Outro caso",                                102/754),
+                ],
+            },
+            {
+                "titulo": "Pergunta 2 – Vínculo com o animal (condicional)",
+                "pct_base": "p2",
+                "opcoes": [
+                    ("A. Meu (mora comigo)",          119/343),
+                    ("B. De alguém próximo",           67/343),
+                    ("C. Da rua",                      84/343),
+                    ("D. Não sei / apareceu agora",    73/343),
+                ],
+            },
+            {
+                "titulo": "Pergunta 3 – Necessidade imediata",
+                "pct_base": "p3",
+                "opcoes": [
+                    ("A. Atendimento veterinário",              191/582),
+                    ("B. Denunciar maus-tratos ou abandono",     99/582),
+                    ("C. Ajudar um animal perdido",              95/582),
+                    ("D. Orientação (não sei o que fazer)",     140/582),
+                    ("E. Outro tipo de ajuda",                   57/582),
+                ],
+            },
+            {
+                "titulo": "Pergunta 4 – Perfil de envolvimento",
+                "pct_base": "p4",
+                "opcoes": [
+                    ("A. Protetor(a) ativo(a)",            67/449),
+                    ("B. Pessoa que ajuda quando pode",   109/449),
+                    ("C. Alguém começando agora",          85/449),
+                    ("D. Só alguém que se importa",       136/449),
+                    ("E. Prefiro não definir",              52/449),
+                ],
+            },
+        ],
+        "insights": [
+            {
+                "titulo": "Principais cenários (Pergunta 1)",
+                "texto": "Maior volume é de tutores precisando de ajuda e pessoas que viram animal em risco. Base relevante também de protetores e de quem está em fase de adoção com dúvidas.",
+            },
+            {
+                "titulo": "Necessidades mais recorrentes (Pergunta 3)",
+                "texto": "Predominam atendimento veterinário e orientação — dor principal é urgência + falta de clareza do que fazer. Denúncias e animal perdido também aparecem fortes, indicando demanda por caminhos práticos/acionáveis.",
+            },
+            {
+                "titulo": "Perfil do público (Pergunta 4)",
+                "texto": "A maioria se identifica como 'só alguém que se importa' e 'ajuda quando pode' — público grande com potencial de engajamento se houver direcionamento simples. Núcleo de protetores ativos existe, mas é menor que o público sensível à causa.",
+            },
+            {
+                "titulo": "Observação sobre P2 (condicional)",
+                "texto": "343 respostas em vínculo indicam que, para parte considerável, o caso envolve animal próprio/recente/próximo — destaque para 'meu' e 'da rua'.",
+            },
+        ],
+    },
 }
 
 st.markdown(f"""
@@ -2488,13 +2567,14 @@ if tipo == "relatorio":
     n_comp   = round(total_r * rel["pct_comp"])
     n_p2     = round(n_int   * rel["pct_p2_vs_int"])
     n_p3     = round(n_int   * rel["pct_p3_vs_int"])
+    n_p4     = round(n_int   * rel["pct_p4_vs_int"]) if rel.get("pct_p4_vs_int") else 0
 
     pct_int  = rel["pct_int"]  * 100
     pct_comp = rel["pct_comp"] * 100
     pct_p3   = rel["pct_p3_vs_int"] * 100
 
     # mapa de base de cada pergunta
-    base_map = {"int": n_int, "p2": n_p2, "p3": n_p3}
+    base_map = {"total": total_r, "int": n_int, "p2": n_p2, "p3": n_p3, "p4": n_p4}
 
     with tab_rel_vis:
         st.markdown(f'<div style="color:{MUTED};font-size:13px;margin-bottom:20px">'
@@ -2521,11 +2601,17 @@ if tipo == "relatorio":
             st.markdown('<div class="chart-title">Jornada dos leads no agente</div>'
                         '<div class="chart-sub">Do total recebido até completar todas as perguntas</div>',
                         unsafe_allow_html=True)
-            funil_labels = ["Total de Leads", "Responderam P1", "Responderam P2", "Responderam P3"]
-            funil_vals   = [total_r, n_int, n_p2, n_p3]
+            _default_funil = [
+                ("Total de Leads", "total"), ("Responderam P1", "int"),
+                ("Responderam P2", "p2"),    ("Responderam P3", "p3"),
+            ]
+            funil_steps  = rel.get("funil_steps", _default_funil)
+            funil_labels = [l for l, _ in funil_steps]
+            funil_vals   = [base_map.get(k, 0) for _, k in funil_steps]
+            _step_colors = [PURPLE, ORANGE, GREEN, AMBER, "#06b6d4", "#f43f5e"]
             fig_funil = go.Figure(go.Bar(
                 x=funil_labels, y=funil_vals,
-                marker=dict(color=[PURPLE, ORANGE, GREEN, AMBER], line=dict(width=0)),
+                marker=dict(color=_step_colors[:len(funil_steps)], line=dict(width=0)),
                 text=[f"{v}<br>{v/total_r*100:.1f}%" for v in funil_vals],
                 textposition="outside", textfont=dict(color=MUTED2, size=12),
             ))
@@ -2535,6 +2621,9 @@ if tipo == "relatorio":
                 bargap=0.4,
             ))
             st.plotly_chart(fig_funil, use_container_width=True, config={"displayModeBar": False})
+            if rel.get("nota_funil"):
+                st.markdown(f'<p style="color:{MUTED};font-size:12px;margin-top:4px">ℹ️ {rel["nota_funil"]}</p>',
+                            unsafe_allow_html=True)
 
     with tab_rel_pergs:
         section("Respostas por Pergunta")

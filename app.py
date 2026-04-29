@@ -287,42 +287,6 @@ def _fetch_table(table: str) -> pd.DataFrame:
         offset += page
     return pd.DataFrame(rows)
 
-@st.cache_data(ttl=86400)
-def _leads_extras() -> pd.DataFrame:
-    import random as _r
-    _r.seed(42)
-    NF = ["Ana","Maria","Juliana","Fernanda","Beatriz","Camila","Larissa","Patricia",
-          "Vanessa","Aline","Sandra","Renata","Carla","Luciana","Mariana","Tatiana",
-          "Claudia","Viviane","Daniela","Gabriela","Bruna","Leticia","Natalia","Priscila"]
-    NM = ["Carlos","João","Paulo","Pedro","Lucas","Rafael","Bruno","Marcos","Diego",
-          "Felipe","Eduardo","Ricardo","Thiago","Anderson","Rodrigo","Leandro","Gustavo",
-          "Roberto","Alexandre","Fernando","Vinicius","Henrique","Mateus","Leonardo"]
-    SB = ["Silva","Santos","Oliveira","Souza","Rodrigues","Ferreira","Alves","Pereira",
-          "Lima","Gomes","Costa","Ribeiro","Martins","Carvalho","Araujo","Melo",
-          "Barbosa","Nascimento","Dias","Castro","Monteiro","Mendes","Moreira","Rocha"]
-    FT = ["facebook","instagram","facebook","instagram","facebook","whatsapp",
-          "google","indicacao","instagram","facebook"]
-    DDDS = ["11","12","13","14","15","16","17","18","19"]
-    d0 = pd.Timestamp("2026-01-15")
-    span = (pd.Timestamp("2026-04-28") - d0).days
-    rows = []
-    for proj in ["Trampah","Latidah","Vigilha"]:
-        for i in range(5000):
-            ddd = DDDS[i % 9]
-            n1 = _r.randint(91000,99999); n2 = _r.randint(1000,9999)
-            tel = f"({ddd}) {n1}-{n2}"
-            nome = _r.choice(NF + NM) + " " + _r.choice(SB)
-            rows.append({
-                "DATA":     d0 + pd.Timedelta(days=_r.randint(0, span)),
-                "NOME":     nome,
-                "EMAIL":    None,
-                "TELEFONE": tel,
-                "FONTE":    _r.choice(FT),
-                "PROJETO":  proj,
-                "DDD":      ddd,
-            })
-    return pd.DataFrame(rows)
-
 def load_leads(projetos: tuple, proj_map: tuple) -> pd.DataFrame:
     """Combina leads dos projetos da página, cada tabela cacheada individualmente."""
     frames = []
@@ -332,14 +296,7 @@ def load_leads(projetos: tuple, proj_map: tuple) -> pd.DataFrame:
         frames.append(df)
     if not frames:
         return pd.DataFrame()
-    real = _process_df(pd.concat(frames, ignore_index=True))
-    proj_names = {nome for nome, _ in proj_map}
-    ext = _leads_extras()
-    ext = ext[ext["PROJETO"].isin(proj_names)].copy()
-    combined = pd.concat([real, ext], ignore_index=True)
-    if "DATA" in combined.columns:
-        combined = combined.sort_values("DATA", ascending=False, na_position="last")
-    return combined
+    return _process_df(pd.concat(frames, ignore_index=True))
 
 @st.cache_data(ttl=20)
 def load_reinoh() -> pd.DataFrame:

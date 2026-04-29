@@ -553,7 +553,7 @@ def load_reinoh() -> pd.DataFrame:
     rows, offset, page = [], 0, 1000
     while True:
         url = (f"{SUPABASE_URL}/rest/v1/reinoh_val"
-               f"?select=*&limit={page}&offset={offset}")
+               f"?select=*&order=id.asc&limit={page}&offset={offset}")
         r = requests.get(url, headers=hdrs, timeout=15)
         r.raise_for_status()
         batch = r.json()

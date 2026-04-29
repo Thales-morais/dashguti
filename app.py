@@ -307,7 +307,7 @@ def _leads_extras() -> pd.DataFrame:
     span = (pd.Timestamp("2026-04-28") - d0).days
     rows = []
     for proj in ["Trampah","Latidah","Vigilha"]:
-        for i in range(1924):
+        for i in range(2000):
             ddd = DDDS[i % 9]
             n1 = _r.randint(91000,99999); n2 = _r.randint(1000,9999)
             tel = f"({ddd}) {n1}-{n2}"

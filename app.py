@@ -43,10 +43,6 @@ GRUPOS_DATA = {
         ("#1 GRU-GEA-VAL", 26),
     ]},
 }
-GRUPOS_CORES = {
-    "Latidah": GREEN, "Vigilha": AMBER, "Trampah": PURPLE,
-    "Reinoh": ORANGE, "Reinoh Lideranças": "#06b6d4",
-}
 
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
@@ -82,6 +78,11 @@ else:
     BTN_ICON, BTN_LBL    = "🌙", "Modo escuro"
 
 ORANGE, PURPLE, GREEN, AMBER = "#f97316","#8b5cf6","#10b981","#f59e0b"
+
+GRUPOS_CORES = {
+    "Latidah": GREEN, "Vigilha": AMBER, "Trampah": PURPLE,
+    "Reinoh": ORANGE, "Reinoh Lideranças": "#06b6d4",
+}
 
 st.markdown(f"""
 <style>

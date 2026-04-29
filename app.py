@@ -29,6 +29,25 @@ PROJETOS = {
     "Vigilha":  "lead_guti_vigilha",
 }
 
+GRUPOS_DATA = {
+    "Latidah":           {"grupos": 5,  "leads": 661, "lista": []},
+    "Vigilha":           {"grupos": 5,  "leads": 20,  "lista": []},
+    "Trampah":           {"grupos": 5,  "leads": 373, "lista": []},
+    "Reinoh":            {"grupos": 1,  "leads": 162, "lista": []},
+    "Reinoh Lideranças": {"grupos": 6,  "leads": 68,  "lista": [
+        ("Bispo Ivan",      4),
+        ("Dp Damares",      7),
+        ("Adeildo Reis",   14),
+        ("Osasco Diego",   11),
+        ("Só Noemi",        6),
+        ("#1 GRU-GEA-VAL", 26),
+    ]},
+}
+GRUPOS_CORES = {
+    "Latidah": GREEN, "Vigilha": AMBER, "Trampah": PURPLE,
+    "Reinoh": ORANGE, "Reinoh Lideranças": "#06b6d4",
+}
+
 st.set_page_config(page_title="DashGuti", page_icon="📊",
                    layout="wide", initial_sidebar_state="expanded")
 
@@ -864,6 +883,7 @@ PAGINAS = {
         "tipo": "visita",
         "tabela": "lead_guti_visita",
     },
+    "👥  Grupos": {"tipo": "grupos"},
 }
 
 with st.sidebar:
@@ -884,6 +904,12 @@ with st.sidebar:
     pagina_cfg = PAGINAS[pagina_sel]
 
     st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+
+    # Filtro de projeto — aba Grupos
+    grupos_proj = "Todos"
+    if pagina_cfg.get("tipo") == "grupos":
+        grupos_proj = st.selectbox("PROJETO", ["Todos"] + list(GRUPOS_DATA.keys()), index=0)
+        st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
 
     # Filtro de base — aba Andreia tem duas bases distintas
     andreia_proj = None
@@ -958,6 +984,8 @@ elif tipo == "geral":
             _g_visita    = load_guti_visita()
             df_all = pd.DataFrame(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
+elif tipo == "grupos":
+    df_all = pd.DataFrame(); erro = None
 else:
     _gastos_df = pd.DataFrame()
     with st.spinner(""):
@@ -1006,6 +1034,8 @@ elif tipo == "visita":
     tab_vs_vis, tab_vs_lista = st.tabs(["  📊  Visão Geral  ","  📋  Contatos  "])
 elif tipo == "geral":
     tab_g_vis, tab_g_det = st.tabs(["  📊  Consolidado  ","  📋  Últimas Atividades  "])
+elif tipo == "grupos":
+    tab_gr_vis, tab_gr_det = st.tabs(["  📊  Visão Geral  ","  📋  Grupos  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -2246,6 +2276,123 @@ if tipo == "visita":
         st.dataframe(df_vs[vs_show], use_container_width=True, hide_index=True, height=580)
 
     st.stop()   # visita complete
+
+# ════════════════════════════════ GRUPOS ═════════════════════════════════════
+if tipo == "grupos":
+    sel = grupos_proj  # vem do sidebar
+
+    if sel == "Todos":
+        t_grupos = sum(d["grupos"] for d in GRUPOS_DATA.values())
+        t_leads  = sum(d["leads"]  for d in GRUPOS_DATA.values())
+        projs_vis = list(GRUPOS_DATA.keys())
+    else:
+        t_grupos = GRUPOS_DATA[sel]["grupos"]
+        t_leads  = GRUPOS_DATA[sel]["leads"]
+        projs_vis = [sel]
+
+    media_lpg = round(t_leads / t_grupos, 1) if t_grupos else 0
+
+    with tab_gr_vis:
+        # ── KPIs ─────────────────────────────────────────────────────────
+        k1, k2, k3, _ = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total de Grupos", fmt_num(t_grupos),
+                             badge=sel, badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Leads nos Grupos", fmt_num(t_leads),
+                             badge="total de membros", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "Média Leads/Grupo", str(media_lpg),
+                             badge="membros por grupo", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+
+        # ── Cards por projeto ─────────────────────────────────────────────
+        if sel == "Todos":
+            section("Por Projeto")
+            st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+            p_cols = st.columns(len(GRUPOS_DATA), gap="medium")
+            for col, (proj, d) in zip(p_cols, GRUPOS_DATA.items()):
+                c = GRUPOS_CORES.get(proj, ORANGE)
+                r, g, b = int(c[1:3],16), int(c[3:5],16), int(c[5:7],16)
+                avg = round(d["leads"] / d["grupos"], 1) if d["grupos"] else 0
+                col.markdown(kpi_card(c, proj, fmt_num(d["leads"]),
+                                      badge=f"{d['grupos']} grupos · {avg} méd.",
+                                      badge_color=f"rgba({r},{g},{b},.12)", badge_txt=c),
+                             unsafe_allow_html=True)
+
+        # ── Gráfico de barras ─────────────────────────────────────────────
+        section("Comparativo" if sel == "Todos" else f"Grupos — {sel}")
+        with st.container(border=True):
+            if sel == "Todos":
+                st.markdown('<div class="chart-title">Leads por projeto</div>'
+                            '<div class="chart-sub">Total de membros em grupos por projeto</div>',
+                            unsafe_allow_html=True)
+                bar_df = pd.DataFrame([
+                    {"Projeto": p, "Leads": d["leads"], "Grupos": d["grupos"],
+                     "Cor": GRUPOS_CORES.get(p, ORANGE)}
+                    for p, d in GRUPOS_DATA.items()
+                ]).sort_values("Leads", ascending=True)
+                fig_gr = go.Figure(go.Bar(
+                    x=bar_df["Leads"], y=bar_df["Projeto"], orientation="h",
+                    marker=dict(color=bar_df["Cor"].tolist(), line=dict(width=0)),
+                    text=bar_df["Leads"].apply(fmt_num),
+                    textposition="outside", textfont=dict(color=MUTED2, size=11),
+                ))
+                fig_gr.update_layout(**base_layout(height=280,
+                    xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                    yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=13),
+                    bargap=0.35,
+                ))
+                st.plotly_chart(fig_gr, use_container_width=True, config={"displayModeBar": False})
+            else:
+                # Se projeto com lista individual (Reinoh Lideranças)
+                lista = GRUPOS_DATA[sel]["lista"]
+                if lista:
+                    st.markdown(f'<div class="chart-title">Leads por grupo — {sel}</div>'
+                                f'<div class="chart-sub">Distribuição entre os {t_grupos} grupos</div>',
+                                unsafe_allow_html=True)
+                    l_df = pd.DataFrame(lista, columns=["Grupo", "Leads"]).sort_values("Leads", ascending=True)
+                    c = GRUPOS_CORES.get(sel, ORANGE)
+                    fig_l = go.Figure(go.Bar(
+                        x=l_df["Leads"], y=l_df["Grupo"], orientation="h",
+                        marker=dict(color=c, line=dict(width=0)),
+                        text=l_df["Leads"].apply(fmt_num),
+                        textposition="outside", textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig_l.update_layout(**base_layout(height=260,
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.35,
+                    ))
+                    st.plotly_chart(fig_l, use_container_width=True, config={"displayModeBar": False})
+                else:
+                    st.markdown(f'<div class="chart-title">{sel} · {t_grupos} grupos · {fmt_num(t_leads)} leads</div>',
+                                unsafe_allow_html=True)
+                    st.info("Detalhamento por grupo não disponível para este projeto.")
+
+    with tab_gr_det:
+        section("Lista de Grupos")
+        rows_tbl = []
+        for proj in projs_vis:
+            d = GRUPOS_DATA[proj]
+            if d["lista"]:
+                for nome, leads in d["lista"]:
+                    rows_tbl.append({"Projeto": proj, "Grupo": nome, "Leads": leads})
+            else:
+                rows_tbl.append({"Projeto": proj, "Grupo": f"— {d['grupos']} grupos (sem detalhamento)", "Leads": d["leads"]})
+        tbl_df = pd.DataFrame(rows_tbl)
+        # totalizador
+        total_row = pd.DataFrame([{"Projeto": "TOTAL", "Grupo": "", "Leads": tbl_df["Leads"].sum()}])
+        tbl_df = pd.concat([tbl_df, total_row], ignore_index=True)
+        st.dataframe(
+            tbl_df, use_container_width=True, hide_index=True,
+            column_config={
+                "Projeto": st.column_config.TextColumn("Projeto", width=200),
+                "Grupo":   st.column_config.TextColumn("Grupo",   width=280),
+                "Leads":   st.column_config.NumberColumn("Leads",  width=100, format="%d"),
+            },
+        )
+
+    st.stop()   # grupos complete
 
 # ══════════════════════════════ GERAL / LEADS ════════════════════════════════
 with tab_geral:

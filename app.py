@@ -418,6 +418,26 @@ def get_spend(since, until):
     return None
 
 @st.cache_data(ttl=20)
+def load_gastos() -> pd.DataFrame:
+    hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
+    rows, offset, page = [], 0, 1000
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/gastos_meta_guti?select=*&order=data.desc&limit={page}&offset={offset}"
+        r = requests.get(url, headers=hdrs, timeout=15)
+        r.raise_for_status()
+        batch = r.json()
+        rows.extend(batch)
+        if len(batch) < page: break
+        offset += page
+    if not rows: return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df.columns = [c.strip().upper() for c in df.columns]
+    df["DATA"] = pd.to_datetime(df["DATA"], errors="coerce")
+    df["VALOR_GASTO"] = pd.to_numeric(df["VALOR_GASTO"], errors="coerce").fillna(0)
+    df["PROJETO"] = df["PROJETO"].str.strip()
+    return df
+
+@st.cache_data(ttl=20)
 def load_buffo() -> pd.DataFrame:
     hdrs = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Prefer": "count=none"}
     rows, offset, page = [], 0, 1000
@@ -939,8 +959,12 @@ elif tipo == "geral":
             df_all = pd.DataFrame(); erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 else:
+    _gastos_df = pd.DataFrame()
     with st.spinner(""):
-        try:    df_all = load_leads(projetos_ativos, tuple(proj_map)); erro = None
+        try:
+            df_all = load_leads(projetos_ativos, tuple(proj_map))
+            _gastos_df = load_gastos()
+            erro = None
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 
 if erro:
@@ -954,9 +978,19 @@ else:
 
 total    = len(df)
 leads_sp = int(df["DDD"].isin(SP_DDDS).sum()) if "DDD" in df.columns else 0
-gasto    = get_spend(since_str, until_str)
-cpl      = (gasto/total) if gasto and total else None
 pct_sp   = f"{leads_sp/total*100:.0f}% do total" if total else ""
+
+# gasto: usa tabela gastos_meta_guti quando disponível, fallback Meta API
+_gasto_proj = {}
+if tipo == "leads" and not _gastos_df.empty:
+    _gm = _gastos_df.copy()
+    if periodo != "Total":
+        _gm = _gm[(_gm["DATA"].dt.date >= data_ini) & (_gm["DATA"].dt.date <= data_fim)]
+    gasto = float(_gm["VALOR_GASTO"].sum()) if not _gm.empty else None
+    _gasto_proj = _gm.groupby("PROJETO")["VALOR_GASTO"].sum().to_dict()
+else:
+    gasto = get_spend(since_str, until_str)
+cpl = (gasto / total) if gasto and total else None
 
 
 # ── renderização por tipo de página ───────────────────────────────────────────
@@ -2223,7 +2257,7 @@ with tab_geral:
                 unsafe_allow_html=True)
     k2.markdown(kpi_card(GREEN,"Valor Gasto",
                          fmt_brl(gasto) if gasto else "—",
-                         badge="Token Meta pendente" if not gasto else "",
+                         badge="todos os projetos" if gasto else "sem dados no período",
                          badge_color="rgba(16,185,129,.12)",badge_txt=GREEN),
                 unsafe_allow_html=True)
     k3.markdown(kpi_card(AMBER,"Custo por Lead",
@@ -2244,11 +2278,18 @@ with tab_geral:
         proj_cols = st.columns(4, gap="medium")
         for col, (nome, _tbl) in zip(proj_cols, projs.items()):
             n = int((df["PROJETO"] == nome).sum())
-            pct = f"{n/total*100:.0f}% do total" if total else ""
+            g_proj = _gasto_proj.get(nome, 0)
+            cpl_proj = g_proj / n if g_proj and n else None
+            if cpl_proj:
+                badge = f"CPL {fmt_brl(cpl_proj)} · {fmt_brl(g_proj)} gastos"
+            elif g_proj:
+                badge = f"{fmt_brl(g_proj)} gastos · sem leads"
+            else:
+                badge = f"{n/total*100:.0f}% do total" if total else ""
             c = proj_colors.get(nome, ORANGE)
             r, g, b = int(c[1:3],16), int(c[3:5],16), int(c[5:7],16)
             col.markdown(kpi_card(c, nome, fmt_num(n),
-                                  badge=pct,
+                                  badge=badge,
                                   badge_color=f"rgba({r},{g},{b},.12)",
                                   badge_txt=c),
                          unsafe_allow_html=True)

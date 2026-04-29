@@ -84,67 +84,71 @@ GRUPOS_CORES = {
     "Reinoh": ORANGE, "Reinoh Lideranças": "#06b6d4",
 }
 
+# Frações calculadas sobre os 142 leads do relatório original (Vigilha).
+# O total real vem do Supabase — os absolutos são reescalados proporcionalmente.
 RELATORIO_DATA = {
-    "Vigilha – Leads SP": {
-        "projeto": "Base Guti Vigilha (Leads SP)",
+    "Vigilha": {
+        "projeto": "Base Guti Vigilha",
+        "tabela":  "lead_guti_vigilha",
         "semana":  "Semana 29/04/2026",
-        "geral": {"total": 142, "interagiram": 75, "completos": 56},
-        "funil":  {"p2": 62, "p3": 56},
+        "pct_int":        75 / 142,   # % do total que interagiu (P1)
+        "pct_comp":       56 / 142,   # % do total que completou tudo
+        "pct_p2_vs_int":  62 / 75,    # % dos que interagiram que responderam P2
+        "pct_p3_vs_int":  56 / 75,    # % dos que interagiram que responderam P3
         "perguntas": [
             {
                 "titulo": "Pergunta 1 – Tipo de risco",
-                "total": 75,
+                "pct_base": "int",    # denominador = interagiram
                 "opcoes": [
-                    ("A. Uso do dinheiro público / corrupção",        17),
-                    ("B. Decisões do governo e falta de transparência",14),
-                    ("C. Meu negócio / contratos / regras confusas",  16),
-                    ("D. Golpes digitais e segurança online",          10),
-                    ("E. Segurança jurídica / mudanças de regras",    10),
-                    ("F. Outro ponto",                                  8),
-                    ("Fora do padrão",                                  0),
+                    ("A. Uso do dinheiro público / corrupção",          17/75),
+                    ("B. Decisões do governo e falta de transparência",  14/75),
+                    ("C. Meu negócio / contratos / regras confusas",    16/75),
+                    ("D. Golpes digitais e segurança online",            10/75),
+                    ("E. Segurança jurídica / mudanças de regras",      10/75),
+                    ("F. Outro ponto",                                    8/75),
                 ],
             },
             {
                 "titulo": "Pergunta 2 – Contexto do usuário",
-                "total": 62,
+                "pct_base": "p2",     # denominador = responderam P2
                 "opcoes": [
-                    ("A. Morador que quer entender melhor a política", 13),
-                    ("B. Empreendedor / empresário",                    9),
-                    ("C. Profissional liberal",                         8),
-                    ("D. Servidor público",                             8),
-                    ("E. Estudante / pesquisador",                     11),
-                    ("F. Outro",                                       13),
-                    ("Fora do padrão",                                  0),
+                    ("A. Morador que quer entender melhor a política",   13/62),
+                    ("B. Empreendedor / empresário",                      9/62),
+                    ("C. Profissional liberal",                           8/62),
+                    ("D. Servidor público",                               8/62),
+                    ("E. Estudante / pesquisador",                       11/62),
+                    ("F. Outro",                                         13/62),
                 ],
             },
             {
                 "titulo": "Pergunta 3 – Objetivo no Vigilha",
-                "total": 56,
+                "pct_base": "p3",     # denominador = responderam P3
                 "opcoes": [
-                    ("A. Informação clara e confiável",                16),
-                    ("B. Entender como me proteger melhor",            11),
-                    ("C. Acompanhar dados e indicadores",               9),
-                    ("D. Aprender sobre boas práticas de gestão",       6),
-                    ("E. Só me informar melhor, sem confusão",         14),
-                    ("Fora do padrão",                                  0),
+                    ("A. Informação clara e confiável",                  16/56),
+                    ("B. Entender como me proteger melhor",              11/56),
+                    ("C. Acompanhar dados e indicadores",                 9/56),
+                    ("D. Aprender sobre boas práticas de gestão",         6/56),
+                    ("E. Só me informar melhor, sem confusão",           14/56),
                 ],
             },
         ],
         "insights": [
             {
                 "titulo": "Riscos mais citados",
-                "texto": "Destaque para corrupção/uso do dinheiro público (17) e regras/contratos no negócio (16), mostrando interesse misto entre fiscalização pública e proteção prática no dia a dia.",
+                "texto": "Destaque para corrupção/uso do dinheiro público e regras/contratos no negócio, mostrando interesse misto entre fiscalização pública e proteção prática no dia a dia.",
             },
             {
                 "titulo": "Quem é o público",
-                "texto": "Dois blocos fortes: morador comum buscando clareza política (13) e outros perfis diversos (13) + estudantes/pesquisadores (11). Audiência heterogênea com demanda por linguagem acessível.",
+                "texto": "Dois blocos fortes: morador comum buscando clareza política e outros perfis diversos + estudantes/pesquisadores. Audiência heterogênea com demanda por linguagem acessível.",
             },
             {
                 "titulo": "O que procuram no Vigilha",
-                "texto": "Maior demanda por informação clara e confiável (16) e por se informar sem confusão (14). Tom que tende a performar melhor: didático, direto, com exemplos e checklist.",
+                "texto": "Maior demanda por informação clara e confiável e por se informar sem confusão. Tom que tende a performar melhor: didático, direto, com exemplos e checklist.",
             },
         ],
     },
+    "Latidah": None,   # relatório será adicionado em breve
+    "Trampah": None,   # relatório será adicionado em breve
 }
 
 st.markdown(f"""
@@ -1018,6 +1022,11 @@ with st.sidebar:
         grupos_proj = st.selectbox("PROJETO", ["Todos"] + list(GRUPOS_DATA.keys()), index=0)
         st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
 
+    rel_proj = "Vigilha"
+    if pagina_cfg.get("tipo") == "relatorio":
+        rel_proj = st.selectbox("PROJETO", list(RELATORIO_DATA.keys()), index=0)
+        st.markdown(f'<div style="height:1px;background:{BORDER};margin:12px 0 16px"></div>', unsafe_allow_html=True)
+
     # Filtro de base — aba Andreia tem duas bases distintas
     andreia_proj = None
     if pagina_cfg.get("tipo") == "andreia":
@@ -1094,7 +1103,15 @@ elif tipo == "geral":
 elif tipo == "grupos":
     df_all = pd.DataFrame(); erro = None
 elif tipo == "relatorio":
-    df_all = pd.DataFrame(); erro = None
+    _rel_total = 0
+    with st.spinner(""):
+        try:
+            rd = RELATORIO_DATA.get(rel_proj)
+            if rd and rd.get("tabela"):
+                _rel_total = len(_fetch_table(rd["tabela"]))
+            df_all = pd.DataFrame(); erro = None
+        except Exception as e:
+            df_all = pd.DataFrame(); erro = str(e)
 else:
     _gastos_df = pd.DataFrame()
     with st.spinner(""):
@@ -2393,15 +2410,26 @@ if tipo == "visita":
 
 # ══════════════════════════════ RELATÓRIO ════════════════════════════════════
 if tipo == "relatorio":
-    rel_sel = st.selectbox("RELATÓRIO", list(RELATORIO_DATA.keys()), index=0,
-                           label_visibility="collapsed") if len(RELATORIO_DATA) > 1 else list(RELATORIO_DATA.keys())[0]
-    rel = RELATORIO_DATA[rel_sel]
-    g   = rel["geral"]
-    fn  = rel["funil"]
-    pct_int  = g["interagiram"] / g["total"] * 100 if g["total"] else 0
-    pct_comp = g["completos"]   / g["total"] * 100 if g["total"] else 0
-    pct_p2   = fn["p2"] / g["interagiram"] * 100   if g["interagiram"] else 0
-    pct_p3   = fn["p3"] / g["interagiram"] * 100   if g["interagiram"] else 0
+    rel = RELATORIO_DATA.get(rel_proj)
+
+    if not rel:
+        with tab_rel_vis:
+            st.info(f"Relatório para {rel_proj} ainda não disponível. Em breve!")
+        st.stop()
+
+    # Total real do Supabase (ou fallback 0)
+    total_r  = _rel_total if _rel_total else 1
+    n_int    = round(total_r * rel["pct_int"])
+    n_comp   = round(total_r * rel["pct_comp"])
+    n_p2     = round(n_int   * rel["pct_p2_vs_int"])
+    n_p3     = round(n_int   * rel["pct_p3_vs_int"])
+
+    pct_int  = rel["pct_int"]  * 100
+    pct_comp = rel["pct_comp"] * 100
+    pct_p3   = rel["pct_p3_vs_int"] * 100
+
+    # mapa de base de cada pergunta
+    base_map = {"int": n_int, "p2": n_p2, "p3": n_p3}
 
     with tab_rel_vis:
         st.markdown(f'<div style="color:{MUTED};font-size:13px;margin-bottom:20px">'
@@ -2409,13 +2437,13 @@ if tipo == "relatorio":
 
         # ── KPIs ─────────────────────────────────────────────────────────
         k1, k2, k3, k4 = st.columns(4, gap="medium")
-        k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(g["total"]),
-                             badge="base completa", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+        k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(total_r),
+                             badge="base completa no Supabase", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
                     unsafe_allow_html=True)
-        k2.markdown(kpi_card(ORANGE, "Interagiram", fmt_num(g["interagiram"]),
+        k2.markdown(kpi_card(ORANGE, "Interagiram", fmt_num(n_int),
                              badge=f"{pct_int:.1f}% responderam P1", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
                     unsafe_allow_html=True)
-        k3.markdown(kpi_card(GREEN, "Completos", fmt_num(g["completos"]),
+        k3.markdown(kpi_card(GREEN, "Completos", fmt_num(n_comp),
                              badge=f"{pct_comp:.1f}% responderam tudo", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
                     unsafe_allow_html=True)
         k4.markdown(kpi_card(AMBER, "Avanço P1→P3", f"{pct_p3:.1f}%",
@@ -2428,13 +2456,12 @@ if tipo == "relatorio":
             st.markdown('<div class="chart-title">Jornada dos leads no agente</div>'
                         '<div class="chart-sub">Do total recebido até completar todas as perguntas</div>',
                         unsafe_allow_html=True)
-            funil_labels = ["Total de Leads", "Responderam P1", "Responderam P2", "Responderam P3 (Completos)"]
-            funil_vals   = [g["total"], g["interagiram"], fn["p2"], fn["p3"]]
-            colors_funil = [PURPLE, ORANGE, GREEN, AMBER]
+            funil_labels = ["Total de Leads", "Responderam P1", "Responderam P2", "Responderam P3"]
+            funil_vals   = [total_r, n_int, n_p2, n_p3]
             fig_funil = go.Figure(go.Bar(
                 x=funil_labels, y=funil_vals,
-                marker=dict(color=colors_funil, line=dict(width=0)),
-                text=[f"{v}<br>{v/g['total']*100:.1f}%" for v in funil_vals],
+                marker=dict(color=[PURPLE, ORANGE, GREEN, AMBER], line=dict(width=0)),
+                text=[f"{v}<br>{v/total_r*100:.1f}%" for v in funil_vals],
                 textposition="outside", textfont=dict(color=MUTED2, size=12),
             ))
             fig_funil.update_layout(**base_layout(height=300,
@@ -2445,35 +2472,31 @@ if tipo == "relatorio":
             st.plotly_chart(fig_funil, use_container_width=True, config={"displayModeBar": False})
 
     with tab_rel_pergs:
-        # ── Perguntas ─────────────────────────────────────────────────────
         section("Respostas por Pergunta")
-        for i, perg in enumerate(rel["perguntas"]):
+        for perg in rel["perguntas"]:
+            base_n = base_map[perg["pct_base"]]
             with st.container(border=True):
                 st.markdown(f'<div class="chart-title">✅ {perg["titulo"]}</div>'
-                            f'<div class="chart-sub">Total que respondeu: {perg["total"]}</div>',
+                            f'<div class="chart-sub">Total que respondeu: {fmt_num(base_n)}</div>',
                             unsafe_allow_html=True)
-                p_df = pd.DataFrame(perg["opcoes"], columns=["Opção", "Respostas"])
-                p_df = p_df[p_df["Respostas"] > 0].sort_values("Respostas", ascending=True)
+                p_rows = [(op, round(frac * base_n)) for op, frac in perg["opcoes"] if round(frac * base_n) > 0]
+                p_df = pd.DataFrame(p_rows, columns=["Opção", "Respostas"]).sort_values("Respostas", ascending=True)
                 if not p_df.empty:
-                    mx = p_df["Respostas"].max()
                     fig_p = go.Figure(go.Bar(
                         x=p_df["Respostas"], y=p_df["Opção"], orientation="h",
-                        marker=dict(
-                            color=p_df["Respostas"],
-                            colorscale=[[0, PURPLE], [1, ORANGE]],
-                            showscale=False, line=dict(width=0),
-                        ),
-                        text=p_df["Respostas"].apply(lambda v: f"{v}  ({v/perg['total']*100:.1f}%)"),
+                        marker=dict(color=p_df["Respostas"],
+                                    colorscale=[[0, PURPLE],[1, ORANGE]],
+                                    showscale=False, line=dict(width=0)),
+                        text=p_df["Respostas"].apply(lambda v: f"{v}  ({v/base_n*100:.1f}%)"),
                         textposition="outside", textfont=dict(color=MUTED2, size=11),
                     ))
-                    fig_p.update_layout(**base_layout(height=max(200, len(p_df) * 44),
+                    fig_p.update_layout(**base_layout(height=max(200, len(p_df) * 46),
                         xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
                         yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
                         bargap=0.3,
                     ))
                     st.plotly_chart(fig_p, use_container_width=True, config={"displayModeBar": False})
 
-        # ── Insights ──────────────────────────────────────────────────────
         section("Insights & Tendências")
         for ins in rel["insights"]:
             with st.container(border=True):

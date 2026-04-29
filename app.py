@@ -84,6 +84,69 @@ GRUPOS_CORES = {
     "Reinoh": ORANGE, "Reinoh Lideranças": "#06b6d4",
 }
 
+RELATORIO_DATA = {
+    "Vigilha – Leads SP": {
+        "projeto": "Base Guti Vigilha (Leads SP)",
+        "semana":  "Semana 29/04/2026",
+        "geral": {"total": 142, "interagiram": 75, "completos": 56},
+        "funil":  {"p2": 62, "p3": 56},
+        "perguntas": [
+            {
+                "titulo": "Pergunta 1 – Tipo de risco",
+                "total": 75,
+                "opcoes": [
+                    ("A. Uso do dinheiro público / corrupção",        17),
+                    ("B. Decisões do governo e falta de transparência",14),
+                    ("C. Meu negócio / contratos / regras confusas",  16),
+                    ("D. Golpes digitais e segurança online",          10),
+                    ("E. Segurança jurídica / mudanças de regras",    10),
+                    ("F. Outro ponto",                                  8),
+                    ("Fora do padrão",                                  0),
+                ],
+            },
+            {
+                "titulo": "Pergunta 2 – Contexto do usuário",
+                "total": 62,
+                "opcoes": [
+                    ("A. Morador que quer entender melhor a política", 13),
+                    ("B. Empreendedor / empresário",                    9),
+                    ("C. Profissional liberal",                         8),
+                    ("D. Servidor público",                             8),
+                    ("E. Estudante / pesquisador",                     11),
+                    ("F. Outro",                                       13),
+                    ("Fora do padrão",                                  0),
+                ],
+            },
+            {
+                "titulo": "Pergunta 3 – Objetivo no Vigilha",
+                "total": 56,
+                "opcoes": [
+                    ("A. Informação clara e confiável",                16),
+                    ("B. Entender como me proteger melhor",            11),
+                    ("C. Acompanhar dados e indicadores",               9),
+                    ("D. Aprender sobre boas práticas de gestão",       6),
+                    ("E. Só me informar melhor, sem confusão",         14),
+                    ("Fora do padrão",                                  0),
+                ],
+            },
+        ],
+        "insights": [
+            {
+                "titulo": "Riscos mais citados",
+                "texto": "Destaque para corrupção/uso do dinheiro público (17) e regras/contratos no negócio (16), mostrando interesse misto entre fiscalização pública e proteção prática no dia a dia.",
+            },
+            {
+                "titulo": "Quem é o público",
+                "texto": "Dois blocos fortes: morador comum buscando clareza política (13) e outros perfis diversos (13) + estudantes/pesquisadores (11). Audiência heterogênea com demanda por linguagem acessível.",
+            },
+            {
+                "titulo": "O que procuram no Vigilha",
+                "texto": "Maior demanda por informação clara e confiável (16) e por se informar sem confusão (14). Tom que tende a performar melhor: didático, direto, com exemplos e checklist.",
+            },
+        ],
+    },
+}
+
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap');
@@ -927,6 +990,7 @@ PAGINAS = {
         "tabela": "lead_guti_visita",
     },
     "👥  Grupos": {"tipo": "grupos"},
+    "📋  Relatório": {"tipo": "relatorio"},
 }
 
 with st.sidebar:
@@ -1029,6 +1093,8 @@ elif tipo == "geral":
         except Exception as e: df_all = pd.DataFrame(); erro = str(e)
 elif tipo == "grupos":
     df_all = pd.DataFrame(); erro = None
+elif tipo == "relatorio":
+    df_all = pd.DataFrame(); erro = None
 else:
     _gastos_df = pd.DataFrame()
     with st.spinner(""):
@@ -1082,6 +1148,8 @@ elif tipo == "geral":
     tab_g_vis, tab_g_det = st.tabs(["  📊  Consolidado  ","  📋  Últimas Atividades  "])
 elif tipo == "grupos":
     tab_gr_vis, tab_gr_det = st.tabs(["  📊  Visão Geral  ","  📋  Grupos  "])
+elif tipo == "relatorio":
+    tab_rel_vis, tab_rel_pergs = st.tabs(["  📊  Visão Geral  ","  📋  Perguntas & Insights  "])
 else:
     tab_geral, tab_leads = st.tabs(["  🗺️  Geral  ","  📋  Leads  "])
 
@@ -2322,6 +2390,99 @@ if tipo == "visita":
         st.dataframe(df_vs[vs_show], use_container_width=True, hide_index=True, height=580)
 
     st.stop()   # visita complete
+
+# ══════════════════════════════ RELATÓRIO ════════════════════════════════════
+if tipo == "relatorio":
+    rel_sel = st.selectbox("RELATÓRIO", list(RELATORIO_DATA.keys()), index=0,
+                           label_visibility="collapsed") if len(RELATORIO_DATA) > 1 else list(RELATORIO_DATA.keys())[0]
+    rel = RELATORIO_DATA[rel_sel]
+    g   = rel["geral"]
+    fn  = rel["funil"]
+    pct_int  = g["interagiram"] / g["total"] * 100 if g["total"] else 0
+    pct_comp = g["completos"]   / g["total"] * 100 if g["total"] else 0
+    pct_p2   = fn["p2"] / g["interagiram"] * 100   if g["interagiram"] else 0
+    pct_p3   = fn["p3"] / g["interagiram"] * 100   if g["interagiram"] else 0
+
+    with tab_rel_vis:
+        st.markdown(f'<div style="color:{MUTED};font-size:13px;margin-bottom:20px">'
+                    f'📌 {rel["projeto"]} · {rel["semana"]}</div>', unsafe_allow_html=True)
+
+        # ── KPIs ─────────────────────────────────────────────────────────
+        k1, k2, k3, k4 = st.columns(4, gap="medium")
+        k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(g["total"]),
+                             badge="base completa", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                    unsafe_allow_html=True)
+        k2.markdown(kpi_card(ORANGE, "Interagiram", fmt_num(g["interagiram"]),
+                             badge=f"{pct_int:.1f}% responderam P1", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),
+                    unsafe_allow_html=True)
+        k3.markdown(kpi_card(GREEN, "Completos", fmt_num(g["completos"]),
+                             badge=f"{pct_comp:.1f}% responderam tudo", badge_color="rgba(16,185,129,.12)", badge_txt=GREEN),
+                    unsafe_allow_html=True)
+        k4.markdown(kpi_card(AMBER, "Avanço P1→P3", f"{pct_p3:.1f}%",
+                             badge="sobre quem respondeu P1", badge_color="rgba(245,158,11,.12)", badge_txt=AMBER),
+                    unsafe_allow_html=True)
+
+        # ── Funil ─────────────────────────────────────────────────────────
+        section("Funil de Conversão")
+        with st.container(border=True):
+            st.markdown('<div class="chart-title">Jornada dos leads no agente</div>'
+                        '<div class="chart-sub">Do total recebido até completar todas as perguntas</div>',
+                        unsafe_allow_html=True)
+            funil_labels = ["Total de Leads", "Responderam P1", "Responderam P2", "Responderam P3 (Completos)"]
+            funil_vals   = [g["total"], g["interagiram"], fn["p2"], fn["p3"]]
+            colors_funil = [PURPLE, ORANGE, GREEN, AMBER]
+            fig_funil = go.Figure(go.Bar(
+                x=funil_labels, y=funil_vals,
+                marker=dict(color=colors_funil, line=dict(width=0)),
+                text=[f"{v}<br>{v/g['total']*100:.1f}%" for v in funil_vals],
+                textposition="outside", textfont=dict(color=MUTED2, size=12),
+            ))
+            fig_funil.update_layout(**base_layout(height=300,
+                xaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                yaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=11),
+                bargap=0.4,
+            ))
+            st.plotly_chart(fig_funil, use_container_width=True, config={"displayModeBar": False})
+
+    with tab_rel_pergs:
+        # ── Perguntas ─────────────────────────────────────────────────────
+        section("Respostas por Pergunta")
+        for i, perg in enumerate(rel["perguntas"]):
+            with st.container(border=True):
+                st.markdown(f'<div class="chart-title">✅ {perg["titulo"]}</div>'
+                            f'<div class="chart-sub">Total que respondeu: {perg["total"]}</div>',
+                            unsafe_allow_html=True)
+                p_df = pd.DataFrame(perg["opcoes"], columns=["Opção", "Respostas"])
+                p_df = p_df[p_df["Respostas"] > 0].sort_values("Respostas", ascending=True)
+                if not p_df.empty:
+                    mx = p_df["Respostas"].max()
+                    fig_p = go.Figure(go.Bar(
+                        x=p_df["Respostas"], y=p_df["Opção"], orientation="h",
+                        marker=dict(
+                            color=p_df["Respostas"],
+                            colorscale=[[0, PURPLE], [1, ORANGE]],
+                            showscale=False, line=dict(width=0),
+                        ),
+                        text=p_df["Respostas"].apply(lambda v: f"{v}  ({v/perg['total']*100:.1f}%)"),
+                        textposition="outside", textfont=dict(color=MUTED2, size=11),
+                    ))
+                    fig_p.update_layout(**base_layout(height=max(200, len(p_df) * 44),
+                        xaxis=dict(gridcolor=GRID_CLR, showline=False, zeroline=False, tickfont_size=10),
+                        yaxis=dict(gridcolor="rgba(0,0,0,0)", showline=False, tickfont_size=12),
+                        bargap=0.3,
+                    ))
+                    st.plotly_chart(fig_p, use_container_width=True, config={"displayModeBar": False})
+
+        # ── Insights ──────────────────────────────────────────────────────
+        section("Insights & Tendências")
+        for ins in rel["insights"]:
+            with st.container(border=True):
+                st.markdown(
+                    f'<div class="chart-title">📌 {ins["titulo"]}</div>'
+                    f'<p style="color:{MUTED};font-size:13px;line-height:1.6;margin:8px 0 0">{ins["texto"]}</p>',
+                    unsafe_allow_html=True)
+
+    st.stop()   # relatorio complete
 
 # ════════════════════════════════ GRUPOS ═════════════════════════════════════
 if tipo == "grupos":

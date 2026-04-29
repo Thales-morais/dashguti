@@ -566,8 +566,10 @@ def load_reinoh() -> pd.DataFrame:
         c = unicodedata.normalize("NFKD", str(c)).encode("ascii", "ignore").decode("ascii")
         return re.sub(r"\s+", "_", c.strip()).upper()
     df.columns = [_norm_col(c) for c in df.columns]
-    # detecta coluna de data (pode ter nomes diferentes dependendo de como foi criada no Supabase)
-    date_col = next((c for c in df.columns if "DATA" in c or "DATE" in c or "CADASTRO" in c), None)
+    # usa "data de cadastro" explicitamente; fallback para qualquer coluna de data
+    _pref = ["DATA_DE_CADASTRO", "DATA_CADASTRO", "DATACADASTRO"]
+    date_col = next((c for c in _pref if c in df.columns), None) or \
+               next((c for c in df.columns if "CADASTRO" in c or "DATA" in c or "DATE" in c), None)
     if date_col:
         df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
                       .dt.tz_convert(BRASILIA).dt.tz_localize(None))

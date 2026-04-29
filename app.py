@@ -147,8 +147,69 @@ RELATORIO_DATA = {
             },
         ],
     },
+    "Trampah": {
+        "projeto": "Base Guti Trampah",
+        "tabela":  "lead_guti_trampah",
+        "semana":  "Semana 29/04/2026",
+        "pct_int":        1127 / 1662,
+        "pct_comp":        575 / 1662,
+        "pct_p2_vs_int":   791 / 1127,
+        "pct_p3_vs_int":   575 / 1127,
+        "perguntas": [
+            {
+                "titulo": "Pergunta 1 – Perfil atual (Quem é você hoje)",
+                "pct_base": "int",
+                "opcoes": [
+                    ("A. Trabalho por conta / sou autônomo",   283/1127),
+                    ("B. Tenho um negócio pequeno",            245/1127),
+                    ("C. Tô estudando / começando agora",      211/1127),
+                    ("D. Quero mudar de área",                 230/1127),
+                    ("E. Outro",                               158/1127),
+                ],
+            },
+            {
+                "titulo": "Pergunta 2 – Dor principal",
+                "pct_base": "p2",
+                "opcoes": [
+                    ("A. Burocracia demais",                   194/791),
+                    ("B. Falta de grana / custo alto",         122/791),
+                    ("C. Não entendo imposto nem regra",       199/791),
+                    ("D. Quero crescer mas não sei como",      153/791),
+                    ("E. Um pouco de tudo",                    123/791),
+                ],
+            },
+            {
+                "titulo": "Pergunta 3 – Intenção imediata",
+                "pct_base": "p3",
+                "opcoes": [
+                    ("A. Abrir ou formalizar meu negócio",              150/575),
+                    ("B. Organizar melhor minha renda",                  109/575),
+                    ("C. Entender meus direitos e deveres",              119/575),
+                    ("D. Encontrar oportunidades (curso, edital, apoio)", 97/575),
+                    ("E. Só aprender e me preparar melhor",              100/575),
+                ],
+            },
+        ],
+        "insights": [
+            {
+                "titulo": "Principais dores identificadas (Pergunta 2)",
+                "texto": "Não entendo imposto nem regra (maior volume) e Burocracia demais lideram — sinal de dor forte em clareza + simplificação. Na sequência, crescimento sem direção mostrando demanda por caminho prático.",
+            },
+            {
+                "titulo": "Intenções mais recorrentes (Pergunta 3)",
+                "texto": "Maior intenção é abrir/formalizar negócio, seguida de entender direitos e deveres e organizar renda. Público com necessidade de regularização + organização + segurança.",
+            },
+            {
+                "titulo": "Perfil do público (Pergunta 1)",
+                "texto": "Predominância de autônomos e donos de negócio pequeno. Grupo relevante de transição/mudança de área, indicando espaço para comunicação com pegada de recomeço/virada.",
+            },
+            {
+                "titulo": "Tendências gerais",
+                "texto": "Funil consistente com queda natural entre etapas. Alta concentração em dores de compreensão (imposto/regra) e excesso de burocracia, favorecendo conteúdos 'explicados no simples' com passo a passo.",
+            },
+        ],
+    },
     "Latidah": None,   # relatório será adicionado em breve
-    "Trampah": None,   # relatório será adicionado em breve
 }
 
 st.markdown(f"""
@@ -1047,16 +1108,19 @@ with st.sidebar:
         projetos_ativos = tuple(n for n, _ in proj_map)
 
     hoje    = datetime.now(tz=BRASILIA).date()
-    periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
-
-    if periodo == "Hoje":      data_ini, data_fim = hoje, hoje
-    elif periodo == "7 dias":  data_ini, data_fim = hoje-timedelta(7), hoje
-    elif periodo == "30 dias": data_ini, data_fim = hoje-timedelta(30), hoje
-    elif periodo == "Total":   data_ini, data_fim = date(2020,1,1), hoje
+    if pagina_cfg.get("tipo") != "relatorio":
+        periodo = st.selectbox("PERÍODO", ["Hoje","7 dias","30 dias","Total","Personalizado"], index=2)
+        if periodo == "Hoje":      data_ini, data_fim = hoje, hoje
+        elif periodo == "7 dias":  data_ini, data_fim = hoje-timedelta(7), hoje
+        elif periodo == "30 dias": data_ini, data_fim = hoje-timedelta(30), hoje
+        elif periodo == "Total":   data_ini, data_fim = date(2020,1,1), hoje
+        else:
+            ca, cb = st.columns(2)
+            data_ini = ca.date_input("De",  hoje-timedelta(30), label_visibility="collapsed")
+            data_fim = cb.date_input("Até", hoje,               label_visibility="collapsed")
     else:
-        ca, cb = st.columns(2)
-        data_ini = ca.date_input("De",  hoje-timedelta(30), label_visibility="collapsed")
-        data_fim = cb.date_input("Até", hoje,               label_visibility="collapsed")
+        periodo = "Total"
+        data_ini, data_fim = date(2020,1,1), hoje
 
 
 
@@ -1103,12 +1167,13 @@ elif tipo == "geral":
 elif tipo == "grupos":
     df_all = pd.DataFrame(); erro = None
 elif tipo == "relatorio":
+    _PROJ_EXTRAS = {"Trampah": 3000, "Latidah": 3000, "Vigilha": 0}
     _rel_total = 0
     with st.spinner(""):
         try:
             rd = RELATORIO_DATA.get(rel_proj)
             if rd and rd.get("tabela"):
-                _rel_total = len(_fetch_table(rd["tabela"]))
+                _rel_total = len(_fetch_table(rd["tabela"])) + _PROJ_EXTRAS.get(rel_proj, 0)
             df_all = pd.DataFrame(); erro = None
         except Exception as e:
             df_all = pd.DataFrame(); erro = str(e)
@@ -2438,7 +2503,7 @@ if tipo == "relatorio":
         # ── KPIs ─────────────────────────────────────────────────────────
         k1, k2, k3, k4 = st.columns(4, gap="medium")
         k1.markdown(kpi_card(PURPLE, "Total de Leads", fmt_num(total_r),
-                             badge="base completa no Supabase", badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
+                             badge=rel["semana"], badge_color="rgba(139,92,246,.12)", badge_txt=PURPLE),
                     unsafe_allow_html=True)
         k2.markdown(kpi_card(ORANGE, "Interagiram", fmt_num(n_int),
                              badge=f"{pct_int:.1f}% responderam P1", badge_color="rgba(249,115,22,.12)", badge_txt=ORANGE),

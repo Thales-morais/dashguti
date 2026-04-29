@@ -553,7 +553,7 @@ def load_reinoh() -> pd.DataFrame:
     rows, offset, page = [], 0, 1000
     while True:
         url = (f"{SUPABASE_URL}/rest/v1/reinoh_val"
-               f"?select=*&order=created_at.asc&limit={page}&offset={offset}")
+               f"?select=*&order=ID.asc&limit={page}&offset={offset}")
         r = requests.get(url, headers=hdrs, timeout=15)
         r.raise_for_status()
         batch = r.json()
@@ -571,8 +571,9 @@ def load_reinoh() -> pd.DataFrame:
     date_col = next((c for c in _pref if c in df.columns), None) or \
                next((c for c in df.columns if "CADASTRO" in c or "DATA" in c or "DATE" in c), None)
     if date_col:
-        df["DATA"] = (pd.to_datetime(df[date_col], errors="coerce", utc=True)
-                      .dt.tz_convert(BRASILIA).dt.tz_localize(None))
+        # campo texto no formato "DD/MM/YYYY HH:MM"
+        df["DATA"] = pd.to_datetime(df[date_col], format="%d/%m/%Y %H:%M",
+                                    errors="coerce", dayfirst=True)
         df = df.sort_values("DATA", ascending=False, na_position="last")
     if "TELEFONE" in df.columns:
         tel = df["TELEFONE"].fillna("").astype(str).str.strip()

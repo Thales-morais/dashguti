@@ -1057,8 +1057,11 @@ if tipo == "leads" and not _gastos_df.empty:
     _gm = _gastos_df.copy()
     if periodo != "Total":
         _gm = _gm[(_gm["DATA"].dt.date >= data_ini) & (_gm["DATA"].dt.date <= data_fim)]
-    gasto = float(_gm["VALOR_GASTO"].sum()) if not _gm.empty else None
     _gasto_proj = _gm.groupby("PROJETO")["VALOR_GASTO"].sum().to_dict()
+    if projeto_sel != "Todos":
+        gasto = float(_gasto_proj.get(projeto_sel, 0)) or None
+    else:
+        gasto = float(_gm["VALOR_GASTO"].sum()) if not _gm.empty else None
 else:
     gasto = get_spend(since_str, until_str)
 cpl = (gasto / total) if gasto and total else None
